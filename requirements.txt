@@ -1,2 +1,5 @@
 streamlit
 pandas
+gspread
+google-auth
+Pillow
