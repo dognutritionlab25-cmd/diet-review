@@ -49,7 +49,7 @@ def get_gsheet():
         client = gspread.authorize(creds)
         sheet_url = st.secrets["google_sheet"]["url"]
         sh = client.open_by_url(sheet_url)
-        return sh.sheet1
+        return sh.worksheet("식단검토신청") 
     except Exception as e:
         return None
 
