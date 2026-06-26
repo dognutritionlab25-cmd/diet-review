@@ -1,8 +1,79 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+import gspread
+from google.oauth2.service_account import Credentials
+import json
+import base64
+from io import BytesIO
+from PIL import Image
 
-st.set_page_config(page_title="반려견 식단 검토 신청", layout="wide")
+st.set_page_config(
+    page_title="반려견 영양연구소 | 식단 검토 신청",
+    page_icon="🐾",
+    layout="wide"
+)
+
+# ── 브랜딩 헤더 ──────────────────────────────────────────────────────────
+st.markdown("""
+<div style="
+    background: linear-gradient(135deg, #2d6a4f 0%, #40916c 60%, #74c69d 100%);
+    padding: 2rem 2.5rem 1.5rem 2.5rem;
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
+">
+    <div style="display:flex; align-items:center; gap:1rem;">
+        <span style="font-size:3rem;">🐾</span>
+        <div>
+            <h1 style="color:white; margin:0; font-size:2rem; font-weight:800; letter-spacing:-0.5px;">
+                반려견 영양연구소
+            </h1>
+            <p style="color:#d8f3dc; margin:0.2rem 0 0 0; font-size:1rem;">
+                식단 검토 신청 시스템 — 전문가가 직접 분석해 드립니다
+            </p>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Google Sheets 연결 ────────────────────────────────────────────────────
+def get_gsheet():
+    """Streamlit Secrets의 서비스 계정 키로 구글 시트 연결"""
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        scopes = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        sheet_url = st.secrets["google_sheet"]["url"]
+        sh = client.open_by_url(sheet_url)
+        return sh.sheet1
+    except Exception as e:
+        return None
+
+def append_to_sheet(ws, row_dict: dict):
+    """헤더가 없으면 첫 행에 추가, 이후 데이터 추가"""
+    try:
+        existing = ws.get_all_values()
+        if not existing:
+            ws.append_row(list(row_dict.keys()))
+        ws.append_row(list(row_dict.values()))
+        return True
+    except Exception as e:
+        st.warning(f"구글 시트 저장 실패: {e}")
+        return False
+
+def encode_image(uploaded_file) -> str:
+    """PIL로 리사이즈 후 base64 인코딩 (시트 저장용)"""
+    if uploaded_file is None:
+        return ""
+    img = Image.open(uploaded_file)
+    img.thumbnail((800, 800))
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=80)
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 # ── AAFCO 기준 ─────────────────────────────────────────────────────────────
 aafco_standards = {
@@ -20,7 +91,7 @@ aafco_standards = {
     "나트륨(mg)": {"min": 200, "max": None},
 }
 
-# ── 메인 DB (생식 계산기 v5.3 동일) ──────────────────────────────────────
+# ── 재료 DB ────────────────────────────────────────────────────────────────
 db_data = [
     {"재료명":"닭발 (뼈 60%)","category":"bone","bone_pct":0.60,"칼로리":215,"단백질":19.0,"지방":14.6,"칼슘":2500,"인":1500,"철":2.0,"아연":1.5,"구리":0.1,"망간":0.05,"비타민A":30,"비타민D":0,"비타민E":0,"나트륨":67},
     {"재료명":"닭목뼈 (뼈 36%)","category":"bone","bone_pct":0.36,"칼로리":154,"단백질":17.6,"지방":8.78,"칼슘":1500,"인":900,"철":2.06,"아연":2.68,"구리":0.1,"망간":0.03,"비타민A":146,"비타민D":0,"비타민E":0,"나트륨":81},
@@ -80,21 +151,16 @@ db_data = [
 food_df = pd.DataFrame(db_data)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# UI 시작
+# STEP 1: 기본 정보
 # ═══════════════════════════════════════════════════════════════════════════
-
-st.title("🐾 반려견 식단 검토 신청서")
-st.info("아래 정보를 입력해주시면 전문가가 식단을 검토해 드립니다.")
-
-# ── STEP 1: 기본 정보 ─────────────────────────────────────────────────────
 st.divider()
 st.subheader("📋 STEP 1. 반려견 기본 정보")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    dog_name   = st.text_input("이름", placeholder="예: 토실이")
-    dog_breed  = st.text_input("견종", placeholder="예: 말티즈")
-    dog_age    = st.number_input("나이 (세)", 0, 25, 3)
+    dog_name  = st.text_input("이름", placeholder="예: 토실이")
+    dog_breed = st.text_input("견종", placeholder="예: 말티즈")
+    dog_age   = st.number_input("나이 (세)", 0, 25, 3)
 with col2:
     dog_gender = st.radio("성별", ["수컷", "암컷"])
     neutered   = st.radio("중성화 여부", ["예", "아니오"])
@@ -119,23 +185,54 @@ with col3:
     der = rer * activity
     st.metric("하루 목표 칼로리 (DER)", f"{der:.0f} kcal")
 
-# ── STEP 2: 식이 이력 ─────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 2: 사진 업로드 (신규)
+# ═══════════════════════════════════════════════════════════════════════════
 st.divider()
-st.subheader("🍽️ STEP 2. 식이 이력")
+st.subheader("📸 STEP 2. 사진 업로드")
+
+photo_col1, photo_col2 = st.columns(2)
+
+with photo_col1:
+    st.markdown("**🐶 반려견 사진** (참고용)")
+    dog_photo = st.file_uploader(
+        "반려견 사진을 업로드해주세요",
+        type=["jpg", "jpeg", "png", "webp"],
+        key="dog_photo"
+    )
+    if dog_photo:
+        st.image(dog_photo, caption=f"{dog_name or '반려견'} 사진", use_container_width=True)
+
+with photo_col2:
+    st.markdown("**🥩 식단 사진** (검토용)")
+    diet_photo = st.file_uploader(
+        "오늘의 식단 사진을 업로드해주세요",
+        type=["jpg", "jpeg", "png", "webp"],
+        key="diet_photo"
+    )
+    if diet_photo:
+        st.image(diet_photo, caption="오늘의 식단", use_container_width=True)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 3: 식이 이력
+# ═══════════════════════════════════════════════════════════════════════════
+st.divider()
+st.subheader("🍽️ STEP 3. 식이 이력")
 
 col1, col2 = st.columns(2)
 with col1:
-    current_diet = st.radio("현재 식단", ["건사료", "화식", "생식", "혼합급여"])
+    current_diet  = st.radio("현재 식단", ["건사료", "화식", "생식", "혼합급여"])
     diet_duration = st.selectbox("현재 식단을 언제부터 먹었나요?",
         ["1주 미만", "1개월", "3개월", "6개월", "1년", "3년 이상"])
 with col2:
     prev_diet = st.text_area("이전 식단 이력 (자유 입력)",
-        placeholder="예: 건사료 8년 → 화식 6개월 → 생식 1년",
-        height=120)
+        placeholder="예: 건사료 8년 → 화식 6개월 → 생식 1년", height=120)
 
-# ── STEP 3: 현재 식단 입력 ────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 4: 식단 입력
+# ═══════════════════════════════════════════════════════════════════════════
 st.divider()
-st.subheader("🥩 STEP 3. 오늘의 식단 입력")
+st.subheader("🥩 STEP 4. 오늘의 식단 입력")
 st.caption("재료를 선택하고 급여량(g)을 입력하세요.")
 
 all_foods = food_df['재료명'].tolist()
@@ -148,9 +245,11 @@ if selected:
         with cols[i % 3]:
             amounts[f] = st.number_input(f"{f} (g)", 0, 1000, 50, step=5, key=f"amt_{f}")
 
-# ── STEP 4: 건강 상태 ─────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 5: 건강 상태
+# ═══════════════════════════════════════════════════════════════════════════
 st.divider()
-st.subheader("🏥 STEP 4. 건강 상태")
+st.subheader("🏥 STEP 5. 건강 상태")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -160,26 +259,30 @@ with col2:
     supplements = st.text_area("영양제", placeholder="예: 오메가3, 유산균", height=80)
     allergies   = st.text_area("알레르기 (알려진 것)", placeholder="예: 닭고기, 없음", height=80)
 
-# ── STEP 5: 궁금한 점 ─────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 6: 궁금한 점
+# ═══════════════════════════════════════════════════════════════════════════
 st.divider()
-st.subheader("💬 STEP 5. 궁금한 점 / 특이사항")
-question = st.text_area("자유 입력", placeholder="예: 최근 변이 묽어졌는데 식단 때문인지 궁금합니다.", height=100)
+st.subheader("💬 STEP 6. 궁금한 점 / 특이사항")
+question = st.text_area("자유 입력",
+    placeholder="예: 최근 변이 묽어졌는데 식단 때문인지 궁금합니다.", height=100)
 
-# ── 제출 버튼 ─────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# 제출 버튼
+# ═══════════════════════════════════════════════════════════════════════════
 st.divider()
 submit = st.button("📨 식단 검토 신청하기", type="primary", use_container_width=True)
 
-# ── 계산 결과 ─────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# 계산 및 결과 출력
+# ═══════════════════════════════════════════════════════════════════════════
 if submit:
     if not dog_name:
         st.error("반려견 이름을 입력해주세요.")
     elif not selected:
         st.error("식단 재료를 하나 이상 선택해주세요.")
     else:
-        st.success(f"✅ **{dog_name}** 보호자님, 신청이 완료됐습니다!")
-        st.divider()
-
-        # 자동 계산
+        # ── 영양 계산 ─────────────────────────────────────────────────────
         total_grams = sum(amounts.values())
         mass_breakdown = {"actual_bone": 0, "muscle_meat": 0, "organ": 0, "veggie": 0}
         total_stats = {k: 0.0 for k in aafco_standards}
@@ -207,10 +310,75 @@ if submit:
             else:
                 mass_breakdown['veggie'] += grams
 
-        # 결과 요약
+        # ── AAFCO 판정 ────────────────────────────────────────────────────
+        res_data = []
+        aafco_summary = {}
+        if total_kcal > 0:
+            for nutri, std in aafco_standards.items():
+                val_1000 = (total_stats[nutri] / total_kcal) * 1000
+                min_v, max_v = std['min'], std['max']
+                if val_1000 < min_v:
+                    status = "❌ 부족"
+                elif max_v and val_1000 > max_v:
+                    status = "⚠️ 과잉"
+                else:
+                    status = "✅ 적합"
+                res_data.append({
+                    "영양소": nutri,
+                    "현재(1000kcal당)": f"{val_1000:.2f}",
+                    "AAFCO 최소": str(min_v),
+                    "판정": status
+                })
+                aafco_summary[nutri] = f"{val_1000:.2f} ({status})"
+
+        # ── 구글 시트 저장 ────────────────────────────────────────────────
+        ws = get_gsheet()
+        sheet_saved = False
+        if ws:
+            row_dict = {
+                "신청일시": str(date.today()),
+                "이름": dog_name,
+                "견종": dog_breed,
+                "나이": dog_age,
+                "성별": dog_gender,
+                "중성화": neutered,
+                "체중(kg)": dog_weight,
+                "목표체중(kg)": goal_weight,
+                "활동계수": activity,
+                "DER(kcal)": f"{der:.0f}",
+                "현재식단": current_diet,
+                "식단기간": diet_duration,
+                "이전식단이력": prev_diet,
+                "질환": diseases,
+                "약": medications,
+                "영양제": supplements,
+                "알레르기": allergies,
+                "궁금한점": question,
+                "총칼로리(kcal)": f"{total_kcal:.0f}",
+                "총그람(g)": total_grams,
+                "반려견사진": "O" if dog_photo else "X",
+                "식단사진": "O" if diet_photo else "X",
+            }
+            # 재료별 급여량 추가
+            for f in selected:
+                row_dict[f] = amounts.get(f, 0)
+            # AAFCO 판정 추가
+            for nutri, summary in aafco_summary.items():
+                row_dict[f"AAFCO_{nutri}"] = summary
+
+            sheet_saved = append_to_sheet(ws, row_dict)
+
+        # ── 결과 표시 ─────────────────────────────────────────────────────
+        st.success(f"✅ **{dog_name}** 보호자님, 신청이 완료됐습니다!")
+        if sheet_saved:
+            st.info("📊 구글 시트에 자동 저장됐습니다.")
+        elif ws is None:
+            st.warning("⚠️ 구글 시트 연결 설정이 없습니다. (Secrets 미설정) CSV로만 저장됩니다.")
+
+        st.divider()
         st.subheader("📊 자동 영양 분석 결과")
 
-        # 기본 정보 요약
+        # 신청 정보 요약
         with st.expander("📋 신청 정보 요약", expanded=True):
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -225,6 +393,23 @@ if submit:
                 st.markdown(f"**질환:** {diseases or '없음'}")
                 st.markdown(f"**알레르기:** {allergies or '없음'}")
                 st.markdown(f"**궁금한 점:** {question or '없음'}")
+
+        # 업로드된 사진 미리보기
+        if dog_photo or diet_photo:
+            with st.expander("📸 업로드된 사진", expanded=True):
+                pc1, pc2 = st.columns(2)
+                with pc1:
+                    if dog_photo:
+                        dog_photo.seek(0)
+                        st.image(dog_photo, caption="반려견 사진", use_container_width=True)
+                    else:
+                        st.caption("반려견 사진 없음")
+                with pc2:
+                    if diet_photo:
+                        diet_photo.seek(0)
+                        st.image(diet_photo, caption="식단 사진", use_container_width=True)
+                    else:
+                        st.caption("식단 사진 없음")
 
         # 칼로리 & 비율
         col1, col2 = st.columns(2)
@@ -255,19 +440,7 @@ if submit:
 
         # AAFCO 분석
         st.markdown("#### 📊 AAFCO 영양 분석")
-        if total_kcal > 0:
-            res_data = []
-            for nutri, std in aafco_standards.items():
-                val_1000 = (total_stats[nutri] / total_kcal) * 1000
-                min_v, max_v = std['min'], std['max']
-                if val_1000 < min_v:
-                    status = f"❌ 부족"
-                elif max_v and val_1000 > max_v:
-                    status = f"⚠️ 과잉"
-                else:
-                    status = "✅ 적합"
-                res_data.append({"영양소": nutri, "현재(1000kcal당)": f"{val_1000:.2f}", "AAFCO 최소": str(min_v), "판정": status})
-
+        if res_data:
             def color_status(val):
                 if "적합" in str(val): return "color:green;font-weight:bold"
                 if "부족" in str(val): return "color:red;font-weight:bold"
@@ -278,15 +451,17 @@ if submit:
                 use_container_width=True, hide_index=True
             )
 
-        # CSV 저장
+        # CSV 다운로드
         st.divider()
         save_data = {
             "이름": dog_name, "견종": dog_breed, "나이": dog_age,
             "체중": dog_weight, "목표체중": goal_weight,
             "현재식단": current_diet, "식단기간": diet_duration,
-            "질환": diseases, "알레르기": allergies, "영양제": supplements,
-            "궁금한점": question,
+            "질환": diseases, "알레르기": allergies,
+            "영양제": supplements, "궁금한점": question,
             "총칼로리": f"{total_kcal:.0f}", "목표칼로리": f"{der:.0f}",
+            "반려견사진": "O" if dog_photo else "X",
+            "식단사진": "O" if diet_photo else "X",
         }
         for f in selected:
             save_data[f] = amounts.get(f, 0)
@@ -300,5 +475,6 @@ if submit:
             use_container_width=True
         )
 
+# ── 푸터 ──────────────────────────────────────────────────────────────────
 st.markdown("---")
-st.caption("반려견 영양 연구소 | 식단 검토 신청 시스템")
+st.caption("🐾 반려견 영양연구소 | 식단 검토 신청 시스템")
