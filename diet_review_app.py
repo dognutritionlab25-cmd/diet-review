@@ -10,6 +10,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 import base64
+import gzip
 from io import BytesIO
 from PIL import Image
 from copy import deepcopy
@@ -290,6 +291,37 @@ food_df = pd.DataFrame(db_data)
 # 반드시 익혀서 급여해야 하는 재료 — DB 수치 자체가 '익힌 상태' 기준이므로
 # 화식 조리 보존율(중복 손실 계산)을 적용하지 않고, 입력값도 익힌 무게 그대로 사용
 PRECOOKED_ITEMS = {"익힌 굴 (Oyster)", "익힌 홍합 (Green-Lipped Mussel)"}
+
+SHEET_SNAPSHOT_PREFIX = "gz1:"
+SHEET_CELL_SAFE_LIMIT = 45000
+
+
+def encode_snapshot_for_sheet(snapshot_json):
+    """Compress a validated snapshot for one Google Sheets cell."""
+    compressed = gzip.compress(snapshot_json.encode("utf-8"), compresslevel=9, mtime=0)
+    encoded = SHEET_SNAPSHOT_PREFIX + base64.urlsafe_b64encode(compressed).decode("ascii")
+    if len(encoded.encode("utf-16-le")) // 2 > SHEET_CELL_SAFE_LIMIT:
+        raise SnapshotError("입력 스냅샷이 Google Sheets 셀 저장 한도를 초과합니다.")
+    return encoded
+
+
+def decode_snapshot_from_sheet(payload):
+    """Read new compressed cells while retaining compatibility with plain JSON cells."""
+    text = str(payload or "")
+    if not text.startswith(SHEET_SNAPSHOT_PREFIX):
+        return text
+    try:
+        compressed = base64.urlsafe_b64decode(text[len(SHEET_SNAPSHOT_PREFIX):].encode("ascii"))
+        return gzip.decompress(compressed).decode("utf-8")
+    except Exception as exc:
+        raise SnapshotError("압축된 입력계산스냅샷을 읽을 수 없습니다.") from exc
+
+
+def review_analysis_from_sheet(row_data, food_names):
+    normalized = dict(row_data)
+    if normalized.get(SNAPSHOT_COLUMN):
+        normalized[SNAPSHOT_COLUMN] = decode_snapshot_from_sheet(normalized[SNAPSHOT_COLUMN])
+    return review_analysis(normalized, food_names)
 
 
 def build_admin_detail_request(row_data, stored_snapshot):
@@ -634,7 +666,7 @@ with tab_admin:
             return None
 
         def recalculate(row_data):
-            result, _, _ = review_analysis(row_data, set(food_df["재료명"]))
+            result, _, _ = review_analysis_from_sheet(row_data, set(food_df["재료명"]))
             return result["kcal"], result["nutrients"], result["mass"], result["der"]
 
         import pandas as _pd
@@ -676,7 +708,7 @@ with tab_admin:
             rd = dict(zip(headers, data_rows[selected_idx]))
 
             try:
-                admin_result, input_gaps, stored_snapshot = review_analysis(rd, set(food_df["재료명"]))
+                admin_result, input_gaps, stored_snapshot = review_analysis_from_sheet(rd, set(food_df["재료명"]))
             except (SnapshotError, ValueError) as exc:
                 st.error(f"계산 자료 확인 필요: {exc}")
                 st.stop()
@@ -1231,11 +1263,6 @@ with tab_user:
     if st.session_state.submitted:
         name = st.session_state.get('submitted_name', '')
         st.success(f"✅ {name} 보호자님, 신청이 완료되었습니다.")
-        if st.session_state.get("submitted_snapshot_json"):
-            if not st.session_state.get("snapshot_saved_to_sheet"):
-                st.info("신청은 접수되었습니다. 상세 입력·계산 결과를 보관하려면 JSON 백업을 내려받아 주세요.")
-            st.download_button("📥 원본 입력·계산 결과 백업 (JSON)",
-                st.session_state["submitted_snapshot_json"], "diet_application_snapshot.json", "application/json")
         st.markdown(f"""
     <div style="background:#f8fffe; border:1.5px solid #74c69d; border-radius:14px; padding:1.8rem 2rem; margin:1rem 0; line-height:2;">
         <p style="font-size:1.05rem; color:#222; margin:0;">
@@ -1313,7 +1340,6 @@ with tab_user:
             total_kcal = nutrition_result["kcal"]
             application_snapshot = create_snapshot(nutrition_request, nutrition_result, original_input)
             snapshot_json = dumps_snapshot(application_snapshot)
-            st.session_state["submitted_snapshot_json"] = snapshot_json
             if kelp_iodine_total > 0:
                 st.caption(f"🌿 켈프 보충제로 요오드 {kelp_iodine_total:.0f}mcg 추가 공급 중")
 
@@ -1343,6 +1369,7 @@ with tab_user:
             today_str = str(date.today())
             ws = get_gsheet()
             sheet_saved = False
+            st.session_state["snapshot_saved_to_sheet"] = False
             if ws:
                 row_dict = {
                     "신청일시": today_str,
@@ -1398,25 +1425,29 @@ with tab_user:
                 row_dict["관리자메모"] = ""
                 row_dict["확인메일"] = "미발송"
 
-                # Never add/reorder operational Sheets columns automatically.
+                # The administrator adds this last header once. Never mutate operational columns here.
                 snapshot_headers = [h.strip() for h in ws.row_values(1)] if ws.get_all_values() else []
                 snapshot_supported = SNAPSHOT_COLUMN in snapshot_headers
-                # Keep within a conservative single-cell payload limit. Never truncate.
-                if snapshot_supported and len(snapshot_json.encode("utf-16-le")) // 2 <= 45000:
-                    row_dict[SNAPSHOT_COLUMN] = snapshot_json
-                    st.session_state["snapshot_saved_to_sheet"] = True
+                if not snapshot_supported:
+                    st.error(
+                        f"신청을 저장할 수 없습니다. Google Sheets 마지막 열에 '{SNAPSHOT_COLUMN}' 헤더가 필요합니다. "
+                        "이용권은 사용완료로 처리되지 않았습니다."
+                    )
                 else:
-                    st.session_state["snapshot_saved_to_sheet"] = False
-                sheet_saved = append_to_sheet(ws, row_dict)
-                st.session_state["snapshot_saved_to_sheet"] = bool(
-                    sheet_saved and SNAPSHOT_COLUMN in row_dict)
+                    try:
+                        row_dict[SNAPSHOT_COLUMN] = encode_snapshot_for_sheet(snapshot_json)
+                    except SnapshotError as exc:
+                        st.error(f"신청을 저장할 수 없습니다: {exc} 이용권은 사용완료로 처리되지 않았습니다.")
+                    else:
+                        sheet_saved = append_to_sheet(ws, row_dict)
+                        st.session_state["snapshot_saved_to_sheet"] = bool(sheet_saved)
 
                 # 결제 건 사용완료 처리 (재제출 방지)
-                if sheet_saved:
+                if sheet_saved and st.session_state["snapshot_saved_to_sheet"]:
                     mark_review_used(st.session_state.get("auth_row"))
 
             # 제출 완료 → session_state 업데이트 후 완료 화면으로 전환
-            if sheet_saved:
+            if sheet_saved and st.session_state["snapshot_saved_to_sheet"]:
                 st.session_state.submitted = True
                 st.session_state.submitted_name = dog_name
                 st.rerun()
@@ -1424,8 +1455,6 @@ with tab_user:
             # 시트 저장 실패 시에도 결과는 표시
             st.divider()
             st.subheader("📊 자동 영양 분석 결과")
-            st.download_button("📥 원본 입력·계산 결과 백업 (JSON)", snapshot_json,
-                               "diet_application_snapshot.json", "application/json")
 
             # 신청 정보 요약
             with st.expander("📋 신청 정보 요약", expanded=True):
