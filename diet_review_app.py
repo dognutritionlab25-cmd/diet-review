@@ -12,6 +12,7 @@ import json
 import base64
 from io import BytesIO
 from PIL import Image
+from copy import deepcopy
 
 st.set_page_config(
     page_title="반려견 영양연구소 | 반려견 식단 분석",
@@ -290,6 +291,276 @@ food_df = pd.DataFrame(db_data)
 # 화식 조리 보존율(중복 손실 계산)을 적용하지 않고, 입력값도 익힌 무게 그대로 사용
 PRECOOKED_ITEMS = {"익힌 굴 (Oyster)", "익힌 홍합 (Green-Lipped Mussel)"}
 
+
+def build_admin_detail_request(row_data, stored_snapshot):
+    """Build a calculator request from the lossless snapshot or a legacy Sheet row."""
+    if stored_snapshot:
+        return deepcopy(stored_snapshot["request"]), []
+
+    parsed = parse_legacy_materials(row_data.get("선택재료", ""))
+    db_names = set(food_df["재료명"].tolist())
+    amounts, excluded = {}, []
+    for name, amount_text in parsed.items():
+        text = str(amount_text).strip()
+        try:
+            amount_g = float(text[:-1]) if text.endswith("g") else None
+        except ValueError:
+            amount_g = None
+        if name in db_names and amount_g is not None:
+            amounts[name] = amount_g
+        else:
+            excluded.append({"name": name, "amount_text": amount_text, "reason": "legacy_unmapped"})
+
+    cooked = row_data.get("식단종류") == "화식"
+    request = make_request(
+        amounts,
+        cooked=cooked,
+        method=row_data.get("조리방법") or "삶기",
+        weight=row_data.get("체중(kg)") or 3,
+        activity=row_data.get("활동계수") or 1.6,
+        original_fields=row_data,
+        excluded=excluded,
+    )
+    gaps = ["LEGACY_NO_SNAPSHOT", "KELP_AMOUNT_NOT_RECORDED"]
+    if cooked:
+        gaps.append("CALCIUM_SUPPLEMENT_NOT_RECORDED")
+    return request, gaps
+
+
+def render_admin_calculator_details(base_request, selected_idx):
+    """Render the existing calculator analyses without writing derived results to Sheets."""
+    request = deepcopy(base_request)
+    supplements = request["supplement_totals"]
+    saved_unit = supplements.get("omega_unit", "mg")
+    if saved_unit not in ("mg", "g"):
+        saved_unit = "mg"
+    unit = st.radio(
+        "EPA/DHA 입력 단위",
+        ["mg", "g"],
+        index=0 if saved_unit == "mg" else 1,
+        horizontal=True,
+        key=f"admin_omega_unit_{selected_idx}",
+    )
+    saved_epa = float(supplements.get("epa", 0) or 0)
+    saved_dha = float(supplements.get("dha", 0) or 0)
+    if saved_unit != unit:
+        factor = 1000 if unit == "mg" else 0.001
+        saved_epa *= factor
+        saved_dha *= factor
+    epa_col, dha_col = st.columns(2)
+    with epa_col:
+        epa = st.number_input(
+            "관리자 EPA 추가량",
+            min_value=0.0,
+            value=saved_epa,
+            step=1.0 if unit == "mg" else 0.01,
+            key=f"admin_epa_{selected_idx}",
+        )
+    with dha_col:
+        dha = st.number_input(
+            "관리자 DHA 추가량",
+            min_value=0.0,
+            value=saved_dha,
+            step=1.0 if unit == "mg" else 0.01,
+            key=f"admin_dha_{selected_idx}",
+        )
+    st.caption("이 값은 현재 관리자 화면의 계산에만 반영되며 Google Sheets에는 저장되지 않습니다.")
+
+    request["supplement_totals"].update(epa=epa, dha=dha, omega_unit=unit)
+    request["supplement_inputs"]["admin_omega3"] = {"epa": epa, "dha": dha, "unit": unit}
+    result = calculate(request, "calculator")
+    calculator_standards = standards("calculator")
+    catalog = catalog_data()
+    foods = {row["재료명"]: row for row in catalog["db_data"]}
+    amino_db = catalog["amino_db"]
+    amino_map = catalog["amino_name_map"]
+    omega_db = catalog["omega_db"]
+    cooked = request["mode"] == "cooked"
+
+    tab_aafco, tab_amino, tab_omega, tab_mineral = st.tabs([
+        "📊 AAFCO 영양분석", "🧬 아미노산 분석", "🐟 오메가 6:3 분석", "🔬 아연:구리 비율"
+    ])
+
+    with tab_aafco:
+        if result["kcal"] <= 0:
+            st.info("DB에 연결된 재료가 없어 상세 영양 분석을 계산할 수 없습니다.")
+        else:
+            kcal_col, der_col, diff_col = st.columns(3)
+            with kcal_col:
+                st.metric("섭취 칼로리", f"{result['kcal']:.0f} kcal")
+            with der_col:
+                st.metric("목표 칼로리", f"{result['der']:.0f} kcal")
+            with diff_col:
+                st.metric("차이", f"{result['kcal'] - result['der']:+.0f} kcal")
+
+            ca_p = result["ratios"]["ca_p"]
+            ca_p_ok = ca_p is not None and 1.1 <= ca_p <= 2.0
+            judgments = basic_judgments(result, "calculator")
+            rows = []
+            for nutrient, reference in calculator_standards.items():
+                value = result["per_1000kcal"][nutrient]
+                status = "✅ 적합"
+                if judgments[nutrient] == "low":
+                    status = f"❌ 부족 (최소 {reference['min']})"
+                elif judgments[nutrient] == "high":
+                    status = f"⚠️ 과잉 (최대 {reference['max']})"
+                if nutrient == "칼슘(mg)" and status == "✅ 적합" and not ca_p_ok:
+                    ratio_text = "계산 불가" if ca_p is None else f"{ca_p:.2f}:1"
+                    status = f"⚠️ Ca:P 불균형 ({ratio_text}, 권장 1.1~2:1)"
+                rows.append({
+                    "영양소": nutrient,
+                    "현재(1000kcal당)": f"{value:.2f}",
+                    "AAFCO 기준": f"{reference['min']}~{reference['max'] if reference['max'] else ''}",
+                    "판정": status,
+                })
+
+            def detail_color(value):
+                return f'color:{"green" if "적합" in value else "red" if "부족" in value else "orange"};font-weight:bold'
+
+            st.dataframe(
+                pd.DataFrame(rows).style.map(detail_color, subset=["판정"]),
+                use_container_width=True,
+                hide_index=True,
+            )
+            if ca_p is None:
+                st.info("인 합계가 0이어서 Ca:P 비율을 계산할 수 없습니다.")
+            elif ca_p_ok:
+                st.info(f"🦴 **Ca:P 비율 = {ca_p:.2f} : 1** ✅ (권장 1.1~2 : 1)")
+            else:
+                st.warning(f"🦴 **Ca:P 비율 = {ca_p:.2f} : 1** ⚠️ 권장 범위(1.1~2:1) 벗어남")
+
+            selected_names = [item["name"] for item in request["items"] if item["grams"] > 0]
+            if not cooked and any("아몬드" in name for name in selected_names):
+                st.warning(
+                    "⚠️ **아몬드 가루 주의**: 비타민E 공급 목적으로 소량(5~10g/일) 사용 권장. "
+                    "지방 함량이 높아(50g/100g) 과량 급여 시 소화 장애 및 췌장 부담 위험이 있습니다."
+                )
+            estimated = [name for name in selected_names
+                         if name in foods and foods[name].get("category") == "bone"
+                         and str(foods[name].get("칼슘출처", "")).startswith("est")]
+            if estimated:
+                st.caption(f"⚠️ 칼슘 추정값 사용 재료: {', '.join(estimated)} — AAFCO 칼슘 판정은 참고값으로 활용하세요.")
+
+    with tab_amino:
+        st.subheader("🧬 필수 아미노산 분석")
+        if cooked:
+            st.caption(f"조리법: {request['method']} | 기존 단백질 보존율 적용")
+        else:
+            st.caption("출처: 기존 생식 계산기 아미노산 DB | 생식(raw) 기준")
+        display_aa = ["류신", "이소류신", "발린", "메티오닌", "리신", "트레오닌", "트립토판", "히스티딘", "페닐알라닌", "아르기닌"]
+        has_amino = any(result["amino"].get(name, 0) > 0 for name in display_aa)
+        if has_amino and result["kcal"] > 0:
+            nrc_adult = {"류신":1700,"이소류신":950,"발린":1230,"메티오닌":830,"리신":1580,"트레오닌":1200,"트립토판":400,"히스티딘":480,"페닐알라닌":1130,"아르기닌":1280}
+            aa_rows = []
+            for name in display_aa:
+                total = result["amino"][name]
+                per_1000 = result["amino_per_1000kcal"][name]
+                row = {"아미노산": name, "총량(mg)": f"{total:.0f}", "1000kcal당(mg)": f"{per_1000:.0f}"}
+                if not cooked:
+                    row.update({"NRC 성견기준": str(nrc_adult[name]), "판정": "✅" if per_1000 >= nrc_adult[name] else "⚠️"})
+                aa_rows.append(row)
+            st.dataframe(pd.DataFrame(aa_rows), use_container_width=True, hide_index=True)
+            metric1, metric2 = st.columns(2)
+            with metric1:
+                st.metric("BCAA 합계", f"{result['bcaa']:.0f} mg")
+            with metric2:
+                st.metric("페닐알라닌+트립토판", f"{result['phenylalanine_plus_tryptophan']:.0f} mg")
+
+            if not cooked:
+                with st.expander("📋 재료별 아미노산 상세"):
+                    detail = []
+                    for item in request["items"]:
+                        if item["grams"] <= 0:
+                            continue
+                        key = amino_map.get(item["name"])
+                        row = {"재료명": item["name"], "급여량(g)": item["grams"]}
+                        if key and key in amino_db:
+                            row.update({name: f"{amino_db[key][name]}mg/100g" for name in display_aa})
+                        else:
+                            row["류신"] = "데이터없음"
+                        detail.append(row)
+                    st.dataframe(pd.DataFrame(detail), use_container_width=True, hide_index=True)
+        else:
+            st.info("아미노산 데이터가 있는 재료를 선택하면 분석됩니다.")
+        if result["coverage"]["amino_missing"]:
+            st.caption("아미노산 DB 미등록 재료: " + ", ".join(result["coverage"]["amino_missing"]))
+
+    with tab_omega:
+        st.subheader("🐟 오메가 6:3 비율 분석")
+        omega3 = result["omega3"]
+        ratio = result["ratios"]["omega6_3"]
+        col6, col3, colr = st.columns(3)
+        with col6:
+            st.metric("오메가-6 추정량", f"{result['omega6']:.2f} g")
+        with col3:
+            added = (result["epa_supplement_g"] + result["dha_supplement_g"]) * 1000
+            st.metric("오메가-3 추정량", f"{omega3:.2f} g", delta=f"+{added:.0f}mg 관리자 입력" if added else None)
+        with colr:
+            st.metric("오메가 6:3 비율", f"{ratio:.1f} : 1" if ratio is not None else "계산 불가")
+        if ratio is None:
+            st.info("오메가3 합계가 0이어서 비율을 계산할 수 없습니다.")
+        elif ratio <= 5:
+            st.success(f"✅ {ratio:.1f}:1 — 기존 계산기의 목표 범위")
+        elif ratio <= 10:
+            st.warning(f"⚠️ {ratio:.1f}:1 — 기존 계산기의 허용 범위")
+        else:
+            st.error(f"❌ {ratio:.1f}:1 — 기존 계산기 기준 오메가-6 비율이 높습니다.")
+
+        if not cooked:
+            source_rows = []
+            for item in request["items"]:
+                name, amount = item["name"], item["grams"]
+                if amount > 0 and name in omega_db:
+                    o6, o3, ratio_text, note = omega_db[name]
+                    source_rows.append({"재료명": name, "급여량(g)": amount,
+                                        "해당량 O6(g)": f"{o6 * amount / 100:.3f}",
+                                        "해당량 O3(g)": f"{o3 * amount / 100:.3f}",
+                                        "비율": ratio_text, "비고": note})
+            if source_rows:
+                st.dataframe(pd.DataFrame(source_rows), use_container_width=True, hide_index=True)
+        if result["coverage"]["omega_missing"]:
+            st.caption("오메가 DB 미등록 재료: " + ", ".join(result["coverage"]["omega_missing"]))
+
+    with tab_mineral:
+        st.subheader("🔬 아연:구리 비율 분석")
+        zinc = result["nutrients"].get("아연(mg)", 0)
+        copper = result["nutrients"].get("구리(mg)", 0)
+        zinc_1000 = result["per_1000kcal"].get("아연(mg)") or 0
+        copper_1000 = result["per_1000kcal"].get("구리(mg)") or 0
+        ratio = result["ratios"]["zn_cu"]
+        zc1, zc2, zc3 = st.columns(3)
+        with zc1:
+            st.metric("아연(1000kcal당)", f"{zinc_1000:.2f} mg")
+        with zc2:
+            st.metric("구리(1000kcal당)", f"{copper_1000:.2f} mg")
+        with zc3:
+            st.metric("아연:구리 비율", f"{ratio:.1f} : 1" if ratio is not None else "계산 불가")
+        st.caption(f"총 아연 {zinc:.2f}mg | 총 구리 {copper:.2f}mg")
+        if ratio is None:
+            st.info("구리 합계가 0이어서 비율을 계산할 수 없습니다.")
+        elif cooked:
+            if ratio < 8:
+                st.error(f"❌ 기존 화식 계산기 기준 범위보다 낮음 ({ratio:.1f}:1)")
+            elif ratio <= 15:
+                st.success(f"✅ 기존 화식 계산기 적정 범위 ({ratio:.1f}:1)")
+            elif ratio <= 20:
+                st.warning(f"⚠️ 기존 화식 계산기 기준 범위보다 높음 ({ratio:.1f}:1)")
+            else:
+                st.error(f"❌ 기존 화식 계산기 기준 크게 높음 ({ratio:.1f}:1)")
+        else:
+            if 5 <= ratio <= 12:
+                st.success(f"✅ 기존 생식 계산기 이상적 범위 ({ratio:.1f}:1)")
+            elif 12 < ratio <= 16:
+                st.info(f"ℹ️ 기존 생식 계산기 허용 범위 ({ratio:.1f}:1)")
+            elif ratio > 16:
+                st.warning(f"⚠️ 기존 생식 계산기 기준 범위보다 높음 ({ratio:.1f}:1)")
+            elif 3 <= ratio < 5:
+                st.warning(f"⚠️ 기존 생식 계산기 기준 범위보다 낮음 ({ratio:.1f}:1)")
+            else:
+                st.error(f"❌ 기존 생식 계산기 기준 크게 낮음 ({ratio:.1f}:1)")
+
+    return result, request
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 이메일 인증 게이트
 # ═══════════════════════════════════════════════════════════════════════════
@@ -562,6 +833,23 @@ with tab_admin:
                         _pd.DataFrame(aafco_rows).style.map(_color, subset=["판정"]),
                         use_container_width=True, hide_index=True
                     )
+
+            st.markdown("### 🔎 생식 계산기 상세 분석")
+            try:
+                admin_detail_request, admin_detail_input_gaps = build_admin_detail_request(rd, stored_snapshot)
+                admin_detail_result, admin_detail_request = render_admin_calculator_details(
+                    admin_detail_request, selected_idx
+                )
+                if admin_detail_input_gaps:
+                    missing_text = ["켈프 보충량"]
+                    if "CALCIUM_SUPPLEMENT_NOT_RECORDED" in admin_detail_input_gaps:
+                        missing_text.append("칼슘 보충량")
+                    st.warning(
+                        "이전 형식의 신청이라 " + ", ".join(missing_text) +
+                        "이 숫자로 저장되지 않았습니다. 상세 분석은 시트에 남은 DB 재료와 급여량만 반영합니다."
+                    )
+            except (SnapshotError, ValueError) as exc:
+                st.error(f"상세 분석 입력 확인 필요: {exc}")
 
             with st.expander("✍️ 검토 메모 & 상태", expanded=True):
                 new_status = st.selectbox(
@@ -1248,4 +1536,3 @@ with tab_user:
 # ── 푸터 ──────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.caption("🐾 반려견 영양연구소 | 반려견 식단 분석")
-
