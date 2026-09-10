@@ -5,6 +5,8 @@ from nutrition_core import calculate, make_request, standards, catalog_data
 from nutrition_core import create_snapshot, dumps_snapshot, parse_material_string as parse_legacy_materials
 from nutrition_core import review_analysis, SNAPSHOT_COLUMN, SnapshotError
 import pandas as pd
+from nutrition_ui import (PRECOOKED_ITEMS, WEIGHT_BASIS_NOTE, weight_label as nutrition_weight_label,
+    render_data_warnings, render_coverage, render_scope, render_cooking_policy)
 from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
@@ -290,7 +292,7 @@ food_df = pd.DataFrame(db_data)
 
 # 반드시 익혀서 급여해야 하는 재료 — DB 수치 자체가 '익힌 상태' 기준이므로
 # 화식 조리 보존율(중복 손실 계산)을 적용하지 않고, 입력값도 익힌 무게 그대로 사용
-PRECOOKED_ITEMS = {"익힌 굴 (Oyster)", "익힌 홍합 (Green-Lipped Mussel)"}
+# PRECOOKED_ITEMS comes from the shared catalog via nutrition_ui.
 
 SHEET_SNAPSHOT_PREFIX = "gz1:"
 SHEET_CELL_SAFE_LIMIT = 45000
@@ -408,6 +410,12 @@ def render_admin_calculator_details(base_request, selected_idx):
     amino_map = catalog["amino_name_map"]
     omega_db = catalog["omega_db"]
     cooked = request["mode"] == "cooked"
+    st.caption("현재 원본 입력을 현재 DB·calculator 프로필로 재계산한 상세 결과입니다. 신청 당시 저장 결과와 기준·시점이 다를 수 있습니다.")
+    st.caption(f"현재 DB: {result['food_db_version']} | 현재 계산 정책: {result['calculation_policy_version']}")
+    render_scope(st, "calculator")
+    render_data_warnings(st, result)
+    if cooked:
+        render_cooking_policy(st, request["method"])
 
     tab_aafco, tab_amino, tab_omega, tab_mineral = st.tabs([
         "📊 AAFCO 영양분석", "🧬 아미노산 분석", "🐟 오메가 6:3 분석", "🔬 아연:구리 비율"
@@ -475,8 +483,10 @@ def render_admin_calculator_details(base_request, selected_idx):
 
     with tab_amino:
         st.subheader("🧬 필수 아미노산 분석")
+        render_coverage(st, result, "amino")
+        st.caption("기존 표시 10개 항목입니다. 티로신은 엔진 결과에 있으나 이 표에는 표시하지 않습니다. BCAA·Phe+Trp도 등록분 합계입니다.")
         if cooked:
-            st.caption(f"조리법: {request['method']} | 기존 단백질 보존율 적용")
+            st.caption(f"조리법: {request['method']} | 기존 단백질 보존율 적용 (veggie·익힌 굴/홍합 제외)")
         else:
             st.caption("출처: 기존 생식 계산기 아미노산 DB | 생식(raw) 기준")
         display_aa = ["류신", "이소류신", "발린", "메티오닌", "리신", "트레오닌", "트립토판", "히스티딘", "페닐알라닌", "아르기닌"]
@@ -514,22 +524,24 @@ def render_admin_calculator_details(base_request, selected_idx):
                     st.dataframe(pd.DataFrame(detail), use_container_width=True, hide_index=True)
         else:
             st.info("아미노산 데이터가 있는 재료를 선택하면 분석됩니다.")
-        if result["coverage"]["amino_missing"]:
-            st.caption("아미노산 DB 미등록 재료: " + ", ".join(result["coverage"]["amino_missing"]))
+        # Missing-food coverage is displayed above, including fully missing diets.
 
     with tab_omega:
         st.subheader("🐟 오메가 6:3 비율 분석")
+        has_omega_data = render_coverage(st, result, "omega")
         omega3 = result["omega3"]
         ratio = result["ratios"]["omega6_3"]
         col6, col3, colr = st.columns(3)
         with col6:
-            st.metric("오메가-6 추정량", f"{result['omega6']:.2f} g")
+            st.metric("오메가-6 등록분", f"{result['omega6']:.2f} g" if has_omega_data else "미등록")
         with col3:
             added = (result["epa_supplement_g"] + result["dha_supplement_g"]) * 1000
-            st.metric("오메가-3 추정량", f"{omega3:.2f} g", delta=f"+{added:.0f}mg 관리자 입력" if added else None)
+            st.metric("오메가-3 등록분 + 보충", f"{omega3:.2f} g" if has_omega_data or added else "미등록", delta=f"+{added:.0f}mg 관리자 입력" if added else None)
         with colr:
-            st.metric("오메가 6:3 비율", f"{ratio:.1f} : 1" if ratio is not None else "계산 불가")
-        if ratio is None:
+            st.metric("오메가 6:3 비율", f"{ratio:.1f} : 1" if ratio is not None and has_omega_data else "계산 불가")
+        if not has_omega_data:
+            st.info("식품 오메가 데이터 미등록으로 식단 비율을 표시할 수 없습니다. 보충 입력이 있다면 그 양만 반영합니다.")
+        elif ratio is None:
             st.info("오메가3 합계가 0이어서 비율을 계산할 수 없습니다.")
         elif ratio <= 5:
             st.success(f"✅ {ratio:.1f}:1 — 기존 계산기의 목표 범위")
@@ -550,11 +562,11 @@ def render_admin_calculator_details(base_request, selected_idx):
                                         "비율": ratio_text, "비고": note})
             if source_rows:
                 st.dataframe(pd.DataFrame(source_rows), use_container_width=True, hide_index=True)
-        if result["coverage"]["omega_missing"]:
-            st.caption("오메가 DB 미등록 재료: " + ", ".join(result["coverage"]["omega_missing"]))
+        # Missing-food coverage is displayed above; missing values are not measured zeros.
 
     with tab_mineral:
         st.subheader("🔬 아연:구리 비율 분석")
+        st.caption("비율 평가는 아연·구리 절대량의 부족/과잉 판정과 다릅니다. 기본 영양표를 함께 확인하세요.")
         zinc = result["nutrients"].get("아연(mg)", 0)
         copper = result["nutrients"].get("구리(mg)", 0)
         zinc_1000 = result["per_1000kcal"].get("아연(mg)") or 0
@@ -808,7 +820,7 @@ with tab_admin:
             if input_gaps:
                 st.warning("이전 형식의 신청입니다. 당시 계산 결과와 켈프·칼슘 보충량이 저장되지 않아, 아래는 기록된 재료의 부분 재계산입니다.")
             else:
-                st.caption("신청 당시 저장한 계산 결과입니다. 현재 DB로 자동 재계산하지 않습니다.")
+                st.caption("아래 기본 표는 신청 당시 저장 결과입니다. 저장 결과를 재계산하거나 덮어쓰지 않습니다. 이후 별도의 상세 표는 현재 기준으로 재계산합니다.")
                 st.caption(f"DB: {admin_result['food_db_version']} | 계산 정책: {admin_result['calculation_policy_version']}")
                 with st.expander("📦 신청 당시 원본 입력·보충제"):
                     st.json(stored_snapshot["original_input"])
@@ -818,7 +830,9 @@ with tab_admin:
                                if stored_snapshot else aafco_standards)
             total_grams_r = sum(mass_bd_r.values())
 
-            with st.expander("📊 영양 분석 결과", expanded=True):
+            with st.expander("📊 신청 당시 저장 결과" if stored_snapshot else "📊 과거 기록의 부분 재계산", expanded=True):
+                render_scope(st, admin_result["profile"], reference=admin_standards)
+                render_data_warnings(st, admin_result)
                 if total_kcal_r <= 0:
                     st.caption("계산 불가 (DB 등록 재료 없음)")
                 else:
@@ -866,7 +880,7 @@ with tab_admin:
                         use_container_width=True, hide_index=True
                     )
 
-            st.markdown("### 🔎 생식 계산기 상세 분석")
+            st.markdown("### 🔎 현재 기준 상세 재계산")
             try:
                 admin_detail_request, admin_detail_input_gaps = build_admin_detail_request(rd, stored_snapshot)
                 admin_detail_result, admin_detail_request = render_admin_calculator_details(
@@ -1049,6 +1063,7 @@ with tab_user:
     # ═══════════════════════════════════════════════════════════════════════════
     st.divider()
     st.subheader("🥩 STEP 4. 오늘의 식단 입력")
+    render_scope(st, "review")
     st.markdown("""
     <div style="background:#fff3e0; border-left:4px solid #ef6c00;
                 padding:1rem 1.2rem; border-radius:8px; margin-bottom:1rem;">
@@ -1129,14 +1144,15 @@ with tab_user:
         </div>
         """, unsafe_allow_html=True)
 
+        render_cooking_policy(st, cooking_method_input)
         cooked_selected = st.multiselect("재료 선택 (화식 — 뼈고기 제외)", cooked_foods, key="cooked_selected")
-        st.caption("⚖️ **익힌 굴·익힌 홍합**은 반드시 익혀서 급여해야 하므로, 아래 입력값은 생고기가 아니라 **익힌 상태 그대로의 무게**입니다.")
+        st.caption(WEIGHT_BASIS_NOTE)
         cooked_amounts = {}
         if cooked_selected:
             cols = st.columns(3)
             for i, f in enumerate(cooked_selected):
                 with cols[i % 3]:
-                    weight_label = f"{f} 익힌 무게 (g)" if f in PRECOOKED_ITEMS else f"{f} 생고기 기준 (g)"
+                    weight_label = nutrition_weight_label(f)
                     cooked_amounts[f] = st.number_input(weight_label, 0, 1000, 50, step=5, key=f"camt_{f}")
 
         # 생식 관련 변수 초기화
@@ -1334,6 +1350,7 @@ with tab_user:
                              "calcium_inputs": original_input["calcium_inputs"]},
                 original_fields=original_input, excluded=extra_items + ([{"snacks_text": snack_input}] if snack_input else []))
             nutrition_result = calculate(nutrition_request, "review")
+            render_data_warnings(st, nutrition_result)
             total_grams = nutrition_result["input_grams"]
             mass_breakdown = nutrition_result["mass"]
             total_stats = nutrition_result["nutrients"]
