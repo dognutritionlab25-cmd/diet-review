@@ -2,9 +2,10 @@
 from nutrition_core import catalog_data, retention, standards
 
 PRECOOKED_ITEMS = frozenset(catalog_data()["PRECOOKED_ITEMS"])
+FRUIT_RAW_ITEMS = frozenset(catalog_data()["FRUIT_RAW_ITEMS"])
 WEIGHT_BASIS_NOTE = (
-    "입력 기준: 익힌 굴·홍합은 익힌 상태의 중량을 사용합니다. 그 외 재료는 현재 계산의 "
-    "조리 전 기준 중량을 입력합니다. 과일·채소·퓨레의 실제 가열 여부를 자동 판별하지 않습니다."
+    "입력 기준: 과일은 생과일 급여량, 익힌 굴·홍합은 익힌 상태의 중량을 사용합니다. "
+    "그 외 재료는 현재 계산의 조리 전 기준 중량을 입력합니다. 퓨레의 상태는 현재 정책을 유지합니다."
 )
 
 
@@ -21,6 +22,22 @@ def render_data_warnings(st, result):
                 "총지방보다 큽니다. 해당 식품의 지방·오메가 결과는 원자료 확인이 필요합니다. "
                 "계산값은 변경하지 않았습니다."
             )
+    missing = result.get("coverage", {}).get("nutrient_missing", {})
+    if missing:
+        detail = "; ".join(f"{nutrient}: {', '.join(foods)}" for nutrient, foods in missing.items())
+        st.warning(
+            "기본 영양소 부분 집계 — " + detail + ". 미등록은 함량 0을 뜻하지 않습니다. "
+            "표의 수치는 등록분 합계이며 해당 영양소의 판정은 보류됩니다."
+        )
+
+
+def nutrient_value_text(result, nutrient):
+    value = result["per_1000kcal"][nutrient]
+    if value is None:
+        return "계산 불가"
+    if result.get("coverage", {}).get("nutrient_missing", {}).get(nutrient):
+        return f"등록분 {value:.2f} (미등록 포함)"
+    return f"{value:.2f}"
 
 
 def render_coverage(st, result, kind):
@@ -63,7 +80,8 @@ def render_cooking_policy(st, method):
         "오메가6·kcal에는 조리 보정을 적용하지 않습니다. 비타민B군은 계산하지 않습니다."
     )
     st.caption(
-        "현재 veggie 그룹은 영양소 보존율을 적용하지 않고 예상 중량에만 수율을 적용합니다. "
+        "과일은 화식에서도 수율과 영양소 보존율을 적용하지 않습니다. "
+        "그 밖의 veggie 그룹은 영양소 보존율을 적용하지 않고 예상 중량에만 수율을 적용합니다. "
         "익힌 굴·홍합은 수율과 보존율을 모두 추가 적용하지 않습니다. "
         "실제 조리 후 중량 입력은 중량 표시에만 반영됩니다."
     )
