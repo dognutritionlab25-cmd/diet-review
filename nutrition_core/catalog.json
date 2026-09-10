@@ -2210,6 +2210,282 @@
       "비타민E": 1.1,
       "나트륨": 220,
       "요오드(mcg)": 0
+    },
+    {
+      "재료명": "사과 (Apple)",
+      "category": "veggie",
+      "bone_pct": 0,
+      "칼로리": 48.0,
+      "단백질": 0.27,
+      "지방": 0.13,
+      "칼슘": 5.0,
+      "인": 11.0,
+      "철": 0.07,
+      "아연": 0.05,
+      "구리": 0.031,
+      "망간": 0.038,
+      "비타민A": 38.0,
+      "비타민D": 0.0,
+      "나트륨": 0.0,
+      "비타민E": null,
+      "요오드(mcg)": null,
+      "source_metadata": {
+        "source": "USDA FoodData Central SR Legacy 2018-04",
+        "fdc_id": 171689,
+        "source_name": "Apples, raw, without skin",
+        "state": "raw",
+        "basis": "edible portion per 100g",
+        "nutrient_units": {
+          "칼로리": "kcal/100g",
+          "단백질": "g/100g",
+          "지방": "g/100g",
+          "칼슘": "mg/100g",
+          "인": "mg/100g",
+          "철": "mg/100g",
+          "아연": "mg/100g",
+          "구리": "mg/100g",
+          "망간": "mg/100g",
+          "비타민A": "IU/100g",
+          "비타민D": "IU/100g",
+          "나트륨": "mg/100g"
+        },
+        "missing_nutrients": [
+          "비타민E(IU)",
+          "요오드(mcg)",
+          "오메가6",
+          "오메가3",
+          "아미노산"
+        ],
+        "unmapped_source_nutrients": {
+          "Vitamin E (alpha-tocopherol)": {
+            "value": 0.05,
+            "unit": "mg/100g",
+            "reason": "engine field requires IU; no conversion applied"
+          },
+          "PUFA 18:2": {
+            "value": 0.031,
+            "unit": "g/100g",
+            "reason": "not mapped to total omega6"
+          },
+          "PUFA 18:3": {
+            "value": 0.007,
+            "unit": "g/100g",
+            "reason": "not mapped to total omega3"
+          },
+          "Iodine, I": {
+            "value": null,
+            "unit": "mcg/100g",
+            "reason": "source record has no value"
+          }
+        }
+      }
+    },
+    {
+      "재료명": "바나나 (Banana)",
+      "category": "veggie",
+      "bone_pct": 0,
+      "칼로리": 89.0,
+      "단백질": 1.09,
+      "지방": 0.33,
+      "칼슘": 5.0,
+      "인": 22.0,
+      "철": 0.26,
+      "아연": 0.15,
+      "구리": 0.078,
+      "망간": 0.27,
+      "비타민A": 64.0,
+      "비타민D": 0.0,
+      "나트륨": 1.0,
+      "비타민E": null,
+      "요오드(mcg)": null,
+      "source_metadata": {
+        "source": "USDA FoodData Central SR Legacy 2018-04",
+        "fdc_id": 173944,
+        "source_name": "Bananas, raw",
+        "state": "raw",
+        "basis": "edible portion per 100g",
+        "nutrient_units": {
+          "칼로리": "kcal/100g",
+          "단백질": "g/100g",
+          "지방": "g/100g",
+          "칼슘": "mg/100g",
+          "인": "mg/100g",
+          "철": "mg/100g",
+          "아연": "mg/100g",
+          "구리": "mg/100g",
+          "망간": "mg/100g",
+          "비타민A": "IU/100g",
+          "비타민D": "IU/100g",
+          "나트륨": "mg/100g"
+        },
+        "missing_nutrients": [
+          "비타민E(IU)",
+          "요오드(mcg)",
+          "오메가6",
+          "오메가3",
+          "아미노산"
+        ],
+        "unmapped_source_nutrients": {
+          "Vitamin E (alpha-tocopherol)": {
+            "value": 0.1,
+            "unit": "mg/100g",
+            "reason": "engine field requires IU; no conversion applied"
+          },
+          "PUFA 18:2": {
+            "value": 0.046,
+            "unit": "g/100g",
+            "reason": "not mapped to total omega6"
+          },
+          "PUFA 18:3": {
+            "value": 0.027,
+            "unit": "g/100g",
+            "reason": "not mapped to total omega3"
+          },
+          "Iodine, I": {
+            "value": null,
+            "unit": "mcg/100g",
+            "reason": "source record has no value"
+          }
+        }
+      }
+    },
+    {
+      "재료명": "딸기 (Strawberry)",
+      "category": "veggie",
+      "bone_pct": 0,
+      "칼로리": 32.0,
+      "단백질": 0.67,
+      "지방": 0.3,
+      "칼슘": 16.0,
+      "인": 24.0,
+      "철": 0.41,
+      "아연": 0.14,
+      "구리": 0.048,
+      "망간": 0.386,
+      "비타민A": 12.0,
+      "비타민D": 0.0,
+      "나트륨": 1.0,
+      "비타민E": null,
+      "요오드(mcg)": null,
+      "source_metadata": {
+        "source": "USDA FoodData Central SR Legacy 2018-04",
+        "fdc_id": 167762,
+        "source_name": "Strawberries, raw",
+        "state": "raw",
+        "basis": "edible portion per 100g",
+        "nutrient_units": {
+          "칼로리": "kcal/100g",
+          "단백질": "g/100g",
+          "지방": "g/100g",
+          "칼슘": "mg/100g",
+          "인": "mg/100g",
+          "철": "mg/100g",
+          "아연": "mg/100g",
+          "구리": "mg/100g",
+          "망간": "mg/100g",
+          "비타민A": "IU/100g",
+          "비타민D": "IU/100g",
+          "나트륨": "mg/100g"
+        },
+        "missing_nutrients": [
+          "비타민E(IU)",
+          "요오드(mcg)",
+          "오메가6",
+          "오메가3",
+          "아미노산"
+        ],
+        "unmapped_source_nutrients": {
+          "Vitamin E (alpha-tocopherol)": {
+            "value": 0.29,
+            "unit": "mg/100g",
+            "reason": "engine field requires IU; no conversion applied"
+          },
+          "PUFA 18:2": {
+            "value": 0.09,
+            "unit": "g/100g",
+            "reason": "not mapped to total omega6"
+          },
+          "PUFA 18:3": {
+            "value": 0.065,
+            "unit": "g/100g",
+            "reason": "not mapped to total omega3"
+          },
+          "Iodine, I": {
+            "value": null,
+            "unit": "mcg/100g",
+            "reason": "source record has no value"
+          }
+        }
+      }
+    },
+    {
+      "재료명": "수박 (Watermelon)",
+      "category": "veggie",
+      "bone_pct": 0,
+      "칼로리": 30.0,
+      "단백질": 0.61,
+      "지방": 0.15,
+      "칼슘": 7.0,
+      "인": 11.0,
+      "철": 0.24,
+      "아연": 0.1,
+      "구리": 0.042,
+      "망간": 0.038,
+      "비타민A": 569,
+      "비타민D": 0.0,
+      "나트륨": 1.0,
+      "비타민E": null,
+      "요오드(mcg)": null,
+      "source_metadata": {
+        "source": "USDA FoodData Central SR Legacy 2018-04",
+        "fdc_id": 167765,
+        "source_name": "Watermelon, raw",
+        "state": "raw",
+        "basis": "edible portion per 100g",
+        "nutrient_units": {
+          "칼로리": "kcal/100g",
+          "단백질": "g/100g",
+          "지방": "g/100g",
+          "칼슘": "mg/100g",
+          "인": "mg/100g",
+          "철": "mg/100g",
+          "아연": "mg/100g",
+          "구리": "mg/100g",
+          "망간": "mg/100g",
+          "비타민A": "IU/100g",
+          "비타민D": "IU/100g",
+          "나트륨": "mg/100g"
+        },
+        "missing_nutrients": [
+          "비타민E(IU)",
+          "요오드(mcg)",
+          "오메가6",
+          "오메가3",
+          "아미노산"
+        ],
+        "unmapped_source_nutrients": {
+          "Vitamin E (alpha-tocopherol)": {
+            "value": 0.05,
+            "unit": "mg/100g",
+            "reason": "engine field requires IU; no conversion applied"
+          },
+          "PUFA 18:2": {
+            "value": 0.05,
+            "unit": "g/100g",
+            "reason": "not mapped to total omega6"
+          },
+          "PUFA 18:3": {
+            "value": 0.0,
+            "unit": "g/100g",
+            "reason": "not mapped to total omega3"
+          },
+          "Iodine, I": {
+            "value": null,
+            "unit": "mcg/100g",
+            "reason": "source record has no value"
+          }
+        }
+      }
     }
   ],
   "PRECOOKED_ITEMS": [
@@ -2375,5 +2651,13 @@
       "organ": 0.78,
       "veggie": 0.88
     }
-  }
+  },
+  "FRUIT_RAW_ITEMS": [
+    "블루베리 (Blueberry)",
+    "크랜베리 (Cranberry)",
+    "사과 (Apple)",
+    "바나나 (Banana)",
+    "딸기 (Strawberry)",
+    "수박 (Watermelon)"
+  ]
 }
