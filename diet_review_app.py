@@ -6,7 +6,7 @@ from nutrition_core import create_snapshot, dumps_snapshot, parse_material_strin
 from nutrition_core import review_analysis, SNAPSHOT_COLUMN, SnapshotError
 import pandas as pd
 from nutrition_ui import (PRECOOKED_ITEMS, WEIGHT_BASIS_NOTE, weight_label as nutrition_weight_label,
-    render_data_warnings, render_coverage, render_scope, render_cooking_policy, nutrient_value_text)
+    render_data_warnings, render_coverage, render_scope, render_cooking_policy)
 from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
@@ -440,9 +440,7 @@ def render_admin_calculator_details(base_request, selected_idx):
             for nutrient, reference in calculator_standards.items():
                 value = result["per_1000kcal"][nutrient]
                 status = "✅ 적합"
-                if judgments[nutrient] == "unavailable":
-                    status = "➖ 판정 보류 (미등록 포함)"
-                elif judgments[nutrient] == "low":
+                if judgments[nutrient] == "low":
                     status = f"❌ 부족 (최소 {reference['min']})"
                 elif judgments[nutrient] == "high":
                     status = f"⚠️ 과잉 (최대 {reference['max']})"
@@ -451,7 +449,7 @@ def render_admin_calculator_details(base_request, selected_idx):
                     status = f"⚠️ Ca:P 불균형 ({ratio_text}, 권장 1.1~2:1)"
                 rows.append({
                     "영양소": nutrient,
-                    "현재(1000kcal당)": nutrient_value_text(result, nutrient),
+                    "현재(1000kcal당)": f"{value:.2f}",
                     "AAFCO 기준": f"{reference['min']}~{reference['max'] if reference['max'] else ''}",
                     "판정": status,
                 })
@@ -867,11 +865,10 @@ with tab_admin:
                     for nutri, std in admin_standards.items():
                         val = admin_result["per_1000kcal"][nutri]
                         min_v, max_v = std["min"], std["max"]
-                        if basic_judgments(admin_result, reference=admin_standards)[nutri] == "unavailable": status = "➖ 판정 보류"
-                        elif basic_judgments(admin_result, reference=admin_standards)[nutri] == "low": status = "❌ 부족"
+                        if basic_judgments(admin_result, reference=admin_standards)[nutri] == "low": status = "❌ 부족"
                         elif basic_judgments(admin_result, reference=admin_standards)[nutri] == "high": status = "⚠️ 과잉"
                         else: status = "✅ 적합"
-                        aafco_rows.append({"영양소": nutri, "현재(1000kcal당)": nutrient_value_text(admin_result, nutri), "AAFCO 최소": str(min_v), "판정": status})
+                        aafco_rows.append({"영양소": nutri, "현재(1000kcal당)": f"{val:.2f}", "AAFCO 최소": str(min_v), "판정": status})
 
                     def _color(val):
                         if "적합" in str(val): return "color:green;font-weight:bold"
@@ -1148,7 +1145,6 @@ with tab_user:
         """, unsafe_allow_html=True)
 
         render_cooking_policy(st, cooking_method_input)
-        st.caption("과일은 생과일 급여량 그대로 계산합니다. 실제로 익혀 급여한 과일은 기존 기타/메모란에 적어주세요.")
         cooked_selected = st.multiselect("재료 선택 (화식 — 뼈고기 제외)", cooked_foods, key="cooked_selected")
         st.caption(WEIGHT_BASIS_NOTE)
         cooked_amounts = {}
@@ -1371,9 +1367,7 @@ with tab_user:
                 for nutri, std in aafco_standards.items():
                     val_1000 = nutrition_result["per_1000kcal"][nutri]
                     min_v, max_v = std['min'], std['max']
-                    if basic_judgments(nutrition_result, "review")[nutri] == "unavailable":
-                        status = "➖ 판정 보류"
-                    elif basic_judgments(nutrition_result, "review")[nutri] == "low":
+                    if basic_judgments(nutrition_result, "review")[nutri] == "low":
                         status = "❌ 부족"
                     elif basic_judgments(nutrition_result, "review")[nutri] == "high":
                         status = "⚠️ 과잉"
@@ -1381,11 +1375,11 @@ with tab_user:
                         status = "✅ 적합"
                     res_data.append({
                         "영양소": nutri,
-                        "현재(1000kcal당)": nutrient_value_text(nutrition_result, nutri),
+                        "현재(1000kcal당)": f"{val_1000:.2f}",
                         "AAFCO 최소": str(min_v),
                         "판정": status
                     })
-                    aafco_summary[nutri] = f"{nutrient_value_text(nutrition_result, nutri)} ({status})"
+                    aafco_summary[nutri] = f"{val_1000:.2f} ({status})"
 
             # ── 구글 시트 저장 ────────────────────────────────────────────────
             auth_ph = st.session_state.get("auth_phone", "unknown")
