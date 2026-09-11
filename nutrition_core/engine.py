@@ -7,7 +7,7 @@ import json
 import math
 from pathlib import Path
 
-ENGINE_VERSION = '1.0.0-stage1'
+ENGINE_VERSION = '1.2.0-prepared-puree-weight'
 _DATA = json.loads(Path(__file__).with_name('catalog.json').read_text())
 
 def canonical_json(value):
@@ -16,7 +16,7 @@ def canonical_json(value):
 def digest(value):
     return hashlib.sha256(canonical_json(value).encode()).hexdigest()
 
-FOOD_DB_VERSION = 'food-' + digest({k:_DATA[k] for k in ['db_data','omega_db','amino_db','amino_name_map']})[:16]
+FOOD_DB_VERSION = 'food-' + digest({k:_DATA[k] for k in ['db_data','omega_db','amino_db','amino_name_map','FRUIT_RAW_ITEMS','PREPARED_PUREE_ITEMS']})[:16]
 ENGINE_SOURCE_HASH = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 _POLICY = {
     'version':'stage1-legacy-effective-v1',
@@ -26,6 +26,11 @@ _POLICY = {
     'omega3_retention':'legacy_mineral_fallback_preserved',
     'precooked':_DATA['PRECOOKED_ITEMS'],
     'yield_organ':'use_defined_organ_entry',
+    'raw_fruit':_DATA['FRUIT_RAW_ITEMS'],
+    'raw_fruit_cooking':'input grams; no yield, retention or actual cooked weight override',
+    'prepared_puree':_DATA['PREPARED_PUREE_ITEMS'],
+    'prepared_puree_cooking':'finished puree input grams; no yield or actual cooked weight override; existing nutrient calculations unchanged',
+    'new_fruit_missing':'null contribution; registered subtotal plus nutrient_missing coverage; judgment unavailable',
     'standards':{
         'calculator':_DATA['aafco_standards'],
         'review':{**_DATA['aafco_standards'],'요오드(mcg)':{'min':220,'max':1400}},
@@ -95,37 +100,44 @@ def calculate(request,profile='review'):
     mass={'actual_bone':0.,'muscle_meat':0.,'organ':0.,'veggie':0.}
     aa={k:0. for k in next(iter(_DATA['amino_db'].values()))}
     omega6=0.;omega3=0.;contributions=[];missing_omega=[];missing_aa=[]
-    data_warnings=[]
+    data_warnings=[];missing_nutrients={}
     for item in req['items']:
         name=item['name']; g=number(item['grams'],'grams')
         if name not in foods:raise ValueError('Unknown food: '+name)
         row=foods[name]; cat=row['category']; precooked=name in _DATA['PRECOOKED_ITEMS']
+        raw_fruit=name in _DATA['FRUIT_RAW_ITEMS']
+        prepared_puree=name in _DATA['PREPARED_PUREE_ITEMS']
+        fixed_weight=raw_fruit or prepared_puree
         if cooked and cat=='bone':raise ValueError('Bone item not allowed in cooked mode')
         expected_basis='cooked' if precooked else 'raw'
         if item.get('weight_basis')!=expected_basis:raise ValueError('Weight basis incompatible with legacy food profile')
         actual=item.get('actual_cooked_g')
         if actual is not None:actual=number(actual,'actual cooked grams')
         grams_total+=g
-        predicted=g if not cooked or precooked else round(g*_DATA['COOKING_YIELD'][method][cat])
-        cooked_total+=actual if cooked and actual is not None and not precooked else predicted
+        predicted=g if not cooked or precooked or fixed_weight else round(g*_DATA['COOKING_YIELD'][method][cat])
+        cooked_total+=actual if cooked and actual is not None and not precooked and not fixed_weight else predicted
         if g<=0:continue
         factor=g/100; nk={}; kcal+=row['칼로리']*factor
         for key in nutrients:
             field=key if key in row else key.split('(')[0]
+            if raw_fruit and row[field] is None:
+                missing_nutrients.setdefault(key,[]).append(name)
+                nk[key]=None
+                continue
             value=row[field]*factor
-            if cooked and cat!='veggie' and not precooked:value*=retention(key,method)
+            if cooked and cat!='veggie' and not precooked and not raw_fruit:value*=retention(key,method)
             nutrients[key]+=value; nk[key]=value
         if cat=='bone':
             mass['actual_bone']+=g*row['bone_pct'];mass['muscle_meat']+=g*(1-row['bone_pct'])
         else:mass[{'meat':'muscle_meat','organ':'organ','veggie':'veggie'}[cat]]+=g
         aa_key=_DATA['amino_name_map'].get(name)
         if aa_key and aa_key in _DATA['amino_db']:
-            rf=retention('단백질(g)',method) if cooked and cat!='veggie' and not precooked else 1.
+            rf=retention('단백질(g)',method) if cooked and cat!='veggie' and not precooked and not raw_fruit else 1.
             for key,v in _DATA['amino_db'][aa_key].items():aa[key]+=v*factor*rf
         else:missing_aa.append(name)
         if name in _DATA['omega_db']:
             o6,o3,*_=_DATA['omega_db'][name]
-            rf=retention('오메가3',method) if cooked and cat!='veggie' and not precooked else 1.
+            rf=retention('오메가3',method) if cooked and cat!='veggie' and not precooked and not raw_fruit else 1.
             omega6+=o6*factor;omega3+=o3*factor*rf
             if o6+o3>row['지방']:data_warnings.append({'food':name,'code':'FATTY_ACIDS_EXCEED_TOTAL_FAT'})
         else:missing_omega.append(name)
@@ -151,7 +163,8 @@ def calculate(request,profile='review'):
                       'zn_cu':safe_ratio(nutrients['아연(mg)'],nutrients['구리(mg)']),
                       'omega6_3':safe_ratio(omega6,omega3)},
             'contributions':contributions,'supplement_contributions':{'iodine_mcg':iodine,'calcium_mg':calcium,'epa_g':epa,'dha_g':dha},
-            'excluded':req.get('excluded',[]),'coverage':{'amino_missing':missing_aa,'omega_missing':missing_omega},
+            'excluded':req.get('excluded',[]),'coverage':{'amino_missing':missing_aa,'omega_missing':missing_omega,
+                **({'nutrient_missing':missing_nutrients} if missing_nutrients else {})},
             'data_warnings':data_warnings,'policy_status':deepcopy(UNRESOLVED_NUTRITION_POLICY)}
 
 def basic_judgments(result,profile=None,reference=None):
@@ -159,5 +172,5 @@ def basic_judgments(result,profile=None,reference=None):
     out={}
     for k,std in (reference if reference is not None else standards(profile)).items():
         v=result['per_1000kcal'][k]
-        out[k]='unavailable' if v is None else 'low' if v<std['min'] else 'high' if std['max'] is not None and v>std['max'] else 'within'
+        out[k]='unavailable' if v is None or result.get('coverage',{}).get('nutrient_missing',{}).get(k) else 'low' if v<std['min'] else 'high' if std['max'] is not None and v>std['max'] else 'within'
     return out

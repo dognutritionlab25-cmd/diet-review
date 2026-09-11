@@ -2210,7 +2210,281 @@
       "비타민E": 1.1,
       "나트륨": 220,
       "요오드(mcg)": 0
+    },
+    {
+      "재료명": "사과 (Apple)",
+      "category": "veggie",
+      "bone_pct": 0,
+      "칼로리": 48,
+      "단백질": 0.27,
+      "지방": 0.13,
+      "칼슘": 5,
+      "인": 11,
+      "철": 0.07,
+      "아연": 0.05,
+      "구리": 0.031,
+      "망간": 0.038,
+      "비타민A": 38,
+      "비타민D": 0,
+      "나트륨": 0,
+      "비타민E": null,
+      "요오드(mcg)": null,
+      "source_metadata": {
+        "source": "USDA FoodData Central SR Legacy (2018-04)",
+        "fdc_id": 171689,
+        "source_name": "Apples, raw, without skin",
+        "state": "raw",
+        "basis": "edible portion per 100g",
+        "preparation": "껍질·씨·심 제외",
+        "nutrient_units": {
+          "칼로리": "kcal",
+          "단백질": "g",
+          "지방": "g",
+          "칼슘": "mg",
+          "인": "mg",
+          "철": "mg",
+          "아연": "mg",
+          "구리": "mg",
+          "망간": "mg",
+          "비타민A": "IU",
+          "비타민D": "IU",
+          "비타민E": "IU (unregistered)",
+          "나트륨": "mg",
+          "요오드(mcg)": "mcg (unregistered)"
+        },
+        "missing_nutrients": {
+          "요오드(mcg)": "absent from source record",
+          "비타민E": "source alpha-tocopherol mg is not mapped to engine IU",
+          "omega": "PUFA 18:2/18:3 not mapped to total O6/O3",
+          "amino": "not registered; no inference"
+        },
+        "unmapped_source_nutrients": {
+          "Vitamin E (alpha-tocopherol)": {
+            "value": 0.05,
+            "unit": "mg"
+          },
+          "PUFA 18:2": {
+            "value": 0.031,
+            "unit": "g"
+          },
+          "PUFA 18:3": {
+            "value": 0.007,
+            "unit": "g"
+          }
+        }
+      }
+    },
+    {
+      "재료명": "바나나 (Banana)",
+      "category": "veggie",
+      "bone_pct": 0,
+      "칼로리": 89,
+      "단백질": 1.09,
+      "지방": 0.33,
+      "칼슘": 5,
+      "인": 22,
+      "철": 0.26,
+      "아연": 0.15,
+      "구리": 0.078,
+      "망간": 0.27,
+      "비타민A": 64,
+      "비타민D": 0,
+      "나트륨": 1,
+      "비타민E": null,
+      "요오드(mcg)": null,
+      "source_metadata": {
+        "source": "USDA FoodData Central SR Legacy (2018-04)",
+        "fdc_id": 173944,
+        "source_name": "Bananas, raw",
+        "state": "raw",
+        "basis": "edible portion per 100g",
+        "preparation": "껍질 제외",
+        "nutrient_units": {
+          "칼로리": "kcal",
+          "단백질": "g",
+          "지방": "g",
+          "칼슘": "mg",
+          "인": "mg",
+          "철": "mg",
+          "아연": "mg",
+          "구리": "mg",
+          "망간": "mg",
+          "비타민A": "IU",
+          "비타민D": "IU",
+          "비타민E": "IU (unregistered)",
+          "나트륨": "mg",
+          "요오드(mcg)": "mcg (unregistered)"
+        },
+        "missing_nutrients": {
+          "요오드(mcg)": "absent from source record",
+          "비타민E": "source alpha-tocopherol mg is not mapped to engine IU",
+          "omega": "PUFA 18:2/18:3 not mapped to total O6/O3",
+          "amino": "not registered; no inference"
+        },
+        "unmapped_source_nutrients": {
+          "Vitamin E (alpha-tocopherol)": {
+            "value": 0.1,
+            "unit": "mg"
+          },
+          "PUFA 18:2": {
+            "value": 0.046,
+            "unit": "g"
+          },
+          "PUFA 18:3": {
+            "value": 0.027,
+            "unit": "g"
+          }
+        }
+      }
+    },
+    {
+      "재료명": "딸기 (Strawberry)",
+      "category": "veggie",
+      "bone_pct": 0,
+      "칼로리": 32,
+      "단백질": 0.67,
+      "지방": 0.3,
+      "칼슘": 16,
+      "인": 24,
+      "철": 0.41,
+      "아연": 0.14,
+      "구리": 0.048,
+      "망간": 0.386,
+      "비타민A": 12,
+      "비타민D": 0,
+      "나트륨": 1,
+      "비타민E": null,
+      "요오드(mcg)": null,
+      "source_metadata": {
+        "source": "USDA FoodData Central SR Legacy (2018-04)",
+        "fdc_id": 167762,
+        "source_name": "Strawberries, raw",
+        "state": "raw",
+        "basis": "edible portion per 100g",
+        "preparation": "꼭지 제외",
+        "nutrient_units": {
+          "칼로리": "kcal",
+          "단백질": "g",
+          "지방": "g",
+          "칼슘": "mg",
+          "인": "mg",
+          "철": "mg",
+          "아연": "mg",
+          "구리": "mg",
+          "망간": "mg",
+          "비타민A": "IU",
+          "비타민D": "IU",
+          "비타민E": "IU (unregistered)",
+          "나트륨": "mg",
+          "요오드(mcg)": "mcg (unregistered)"
+        },
+        "missing_nutrients": {
+          "요오드(mcg)": "absent from source record",
+          "비타민E": "source alpha-tocopherol mg is not mapped to engine IU",
+          "omega": "PUFA 18:2/18:3 not mapped to total O6/O3",
+          "amino": "not registered; no inference"
+        },
+        "unmapped_source_nutrients": {
+          "Vitamin E (alpha-tocopherol)": {
+            "value": 0.29,
+            "unit": "mg"
+          },
+          "PUFA 18:2": {
+            "value": 0.09,
+            "unit": "g"
+          },
+          "PUFA 18:3": {
+            "value": 0.065,
+            "unit": "g"
+          }
+        }
+      }
+    },
+    {
+      "재료명": "수박 (Watermelon)",
+      "category": "veggie",
+      "bone_pct": 0,
+      "칼로리": 30,
+      "단백질": 0.61,
+      "지방": 0.15,
+      "칼슘": 7,
+      "인": 11,
+      "철": 0.24,
+      "아연": 0.1,
+      "구리": 0.042,
+      "망간": 0.038,
+      "비타민A": 569,
+      "비타민D": 0,
+      "나트륨": 1,
+      "비타민E": null,
+      "요오드(mcg)": null,
+      "source_metadata": {
+        "source": "USDA FoodData Central SR Legacy (2018-04)",
+        "fdc_id": 167765,
+        "source_name": "Watermelon, raw",
+        "state": "raw",
+        "basis": "edible portion per 100g",
+        "preparation": "껍질·씨 제외",
+        "nutrient_units": {
+          "칼로리": "kcal",
+          "단백질": "g",
+          "지방": "g",
+          "칼슘": "mg",
+          "인": "mg",
+          "철": "mg",
+          "아연": "mg",
+          "구리": "mg",
+          "망간": "mg",
+          "비타민A": "IU",
+          "비타민D": "IU",
+          "비타민E": "IU (unregistered)",
+          "나트륨": "mg",
+          "요오드(mcg)": "mcg (unregistered)"
+        },
+        "missing_nutrients": {
+          "요오드(mcg)": "absent from source record",
+          "비타민E": "source alpha-tocopherol mg is not mapped to engine IU",
+          "omega": "PUFA 18:2/18:3 not mapped to total O6/O3",
+          "amino": "not registered; no inference"
+        },
+        "unmapped_source_nutrients": {
+          "Vitamin E (alpha-tocopherol)": {
+            "value": 0.05,
+            "unit": "mg"
+          },
+          "PUFA 18:2": {
+            "value": 0.05,
+            "unit": "g"
+          },
+          "PUFA 18:3": {
+            "value": 0,
+            "unit": "g"
+          }
+        }
+      }
     }
+  ],
+  "FRUIT_RAW_ITEMS": [
+    "블루베리 (Blueberry)",
+    "크랜베리 (Cranberry)",
+    "사과 (Apple)",
+    "바나나 (Banana)",
+    "딸기 (Strawberry)",
+    "수박 (Watermelon)"
+  ],
+  "PREPARED_PUREE_ITEMS": [
+    "브로콜리 퓨레 (Broccoli)",
+    "토마토 퓨레 (Tomato)",
+    "우엉 퓨레 (Burdock Root)",
+    "청경채 퓨레 (Bok Choy)",
+    "단호박 퓨레 (Kabocha)",
+    "파프리카 퓨레 (Paprika)",
+    "샐러리 퓨레 (Celery)",
+    "당근 퓨레 (Carrot)",
+    "양배추 퓨레 (Cabbage)",
+    "배추 퓨레 (Napa Cabbage)",
+    "케일 퓨레 (Kale)",
+    "아스파라거스 퓨레 (Asparagus)"
   ],
   "PRECOOKED_ITEMS": [
     "익힌 굴 (Oyster)",
