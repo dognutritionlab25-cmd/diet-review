@@ -1,12 +1,13 @@
 from nutrition_core import basic_judgments
 from nutrition_core import energy_requirements
 import streamlit as st
-from nutrition_core import calculate, make_request, standards, catalog_data
+from nutrition_core import calculate, make_request, standards, catalog_data, weight_applications
 from nutrition_core import create_snapshot, dumps_snapshot, parse_material_string as parse_legacy_materials
 from nutrition_core import review_analysis, SNAPSHOT_COLUMN, SnapshotError
 import pandas as pd
-from nutrition_ui import (PRECOOKED_ITEMS, WEIGHT_BASIS_NOTE, weight_label as nutrition_weight_label,
-    render_data_warnings, render_coverage, render_scope, render_cooking_policy)
+from nutrition_ui import (PRECOOKED_ITEMS, weight_label as nutrition_weight_label,
+    render_data_warnings, render_coverage, render_weight_basis_selector, render_admin_policy,
+    nutrient_value_text)
 from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
@@ -411,11 +412,22 @@ def render_admin_calculator_details(base_request, selected_idx):
     omega_db = catalog["omega_db"]
     cooked = request["mode"] == "cooked"
     st.caption("현재 원본 입력을 현재 DB·calculator 프로필로 재계산한 상세 결과입니다. 신청 당시 저장 결과와 기준·시점이 다를 수 있습니다.")
-    st.caption(f"현재 DB: {result['food_db_version']} | 현재 계산 정책: {result['calculation_policy_version']}")
-    render_scope(st, "calculator")
     render_data_warnings(st, result)
-    if cooked:
-        render_cooking_policy(st, request["method"])
+    applied_rows = [
+        {
+            "재료명": row["name"],
+            "입력량(g)": row["input_grams"],
+            "현재 계산 적용 중량(g)": row["applied_grams"],
+            "입력 기준": row["input_basis"],
+        }
+        for row in weight_applications(request)
+    ]
+    st.markdown("**현재 계산 적용 중량**")
+    if applied_rows:
+        st.dataframe(pd.DataFrame(applied_rows), use_container_width=True, hide_index=True)
+    else:
+        st.caption("계산 가능한 고정 DB 재료가 없습니다.")
+    render_admin_policy(st, result, "calculator", method=request["method"] if cooked else None)
 
     tab_aafco, tab_amino, tab_omega, tab_mineral = st.tabs([
         "📊 AAFCO 영양분석", "🧬 아미노산 분석", "🐟 오메가 6:3 분석", "🔬 아연:구리 비율"
@@ -440,7 +452,9 @@ def render_admin_calculator_details(base_request, selected_idx):
             for nutrient, reference in calculator_standards.items():
                 value = result["per_1000kcal"][nutrient]
                 status = "✅ 적합"
-                if judgments[nutrient] == "low":
+                if judgments[nutrient] == "unavailable":
+                    status = "⚪ 판정 보류 (미등록 포함)"
+                elif judgments[nutrient] == "low":
                     status = f"❌ 부족 (최소 {reference['min']})"
                 elif judgments[nutrient] == "high":
                     status = f"⚠️ 과잉 (최대 {reference['max']})"
@@ -449,7 +463,7 @@ def render_admin_calculator_details(base_request, selected_idx):
                     status = f"⚠️ Ca:P 불균형 ({ratio_text}, 권장 1.1~2:1)"
                 rows.append({
                     "영양소": nutrient,
-                    "현재(1000kcal당)": f"{value:.2f}",
+                    "현재(1000kcal당)": nutrient_value_text(result, nutrient),
                     "AAFCO 기준": f"{reference['min']}~{reference['max'] if reference['max'] else ''}",
                     "판정": status,
                 })
@@ -789,6 +803,10 @@ with tab_admin:
 
             with st.expander("🥩 식단 입력 내용", expanded=True):
                 if stored_snapshot:
+                    saved_mode = stored_snapshot["request"].get("weight_basis_mode", "raw_input")
+                    if stored_snapshot["request"].get("mode") == "cooked":
+                        saved_mode_label = "이미 익힌 음식 실제 무게" if saved_mode == "cooked_input" else "조리 전 재료 무게"
+                        st.caption(f"신청자가 선택한 입력 기준: {saved_mode_label}")
                     # The lossless input drives details; legacy text is only for old rows.
                     db_items = [{"재료명": item["name"], "급여량(g)": item["grams"]}
                                 for item in stored_snapshot["request"]["items"]]
@@ -821,7 +839,6 @@ with tab_admin:
                 st.warning("이전 형식의 신청입니다. 당시 계산 결과와 켈프·칼슘 보충량이 저장되지 않아, 아래는 기록된 재료의 부분 재계산입니다.")
             else:
                 st.caption("아래 기본 표는 신청 당시 저장 결과입니다. 저장 결과를 재계산하거나 덮어쓰지 않습니다. 이후 별도의 상세 표는 현재 기준으로 재계산합니다.")
-                st.caption(f"DB: {admin_result['food_db_version']} | 계산 정책: {admin_result['calculation_policy_version']}")
                 with st.expander("📦 신청 당시 원본 입력·보충제"):
                     st.json(stored_snapshot["original_input"])
             total_kcal_r, total_stats_r, mass_bd_r, der_r = (
@@ -831,7 +848,6 @@ with tab_admin:
             total_grams_r = sum(mass_bd_r.values())
 
             with st.expander("📊 신청 당시 저장 결과" if stored_snapshot else "📊 과거 기록의 부분 재계산", expanded=True):
-                render_scope(st, admin_result["profile"], reference=admin_standards)
                 render_data_warnings(st, admin_result)
                 if total_kcal_r <= 0:
                     st.caption("계산 불가 (DB 등록 재료 없음)")
@@ -865,10 +881,11 @@ with tab_admin:
                     for nutri, std in admin_standards.items():
                         val = admin_result["per_1000kcal"][nutri]
                         min_v, max_v = std["min"], std["max"]
-                        if basic_judgments(admin_result, reference=admin_standards)[nutri] == "low": status = "❌ 부족"
+                        if basic_judgments(admin_result, reference=admin_standards)[nutri] == "unavailable": status = "⚪ 판정 보류 (미등록 포함)"
+                        elif basic_judgments(admin_result, reference=admin_standards)[nutri] == "low": status = "❌ 부족"
                         elif basic_judgments(admin_result, reference=admin_standards)[nutri] == "high": status = "⚠️ 과잉"
                         else: status = "✅ 적합"
-                        aafco_rows.append({"영양소": nutri, "현재(1000kcal당)": f"{val:.2f}", "AAFCO 최소": str(min_v), "판정": status})
+                        aafco_rows.append({"영양소": nutri, "현재(1000kcal당)": nutrient_value_text(admin_result, nutri), "AAFCO 최소": str(min_v), "판정": status})
 
                     def _color(val):
                         if "적합" in str(val): return "color:green;font-weight:bold"
@@ -1063,7 +1080,6 @@ with tab_user:
     # ═══════════════════════════════════════════════════════════════════════════
     st.divider()
     st.subheader("🥩 STEP 4. 오늘의 식단 입력")
-    render_scope(st, "review")
     st.markdown("""
     <div style="background:#fff3e0; border-left:4px solid #ef6c00;
                 padding:1rem 1.2rem; border-radius:8px; margin-bottom:1rem;">
@@ -1080,6 +1096,7 @@ with tab_user:
     # 생식/화식 선택
     diet_type = st.radio("식단 종류", ["🥩 생식", "🍲 화식"], horizontal=True, key="diet_type_select")
     is_cooked = diet_type == "🍲 화식"
+    weight_basis_mode = "raw_input"
 
     all_foods = food_df['재료명'].tolist()
     cooked_foods = food_df[food_df['category'] != 'bone']['재료명'].tolist()
@@ -1127,7 +1144,7 @@ with tab_user:
 
     # ── 화식 입력 ──────────────────────────────────────────────────────────────
     else:
-        st.caption("⚠️ 화식 계산은 조리 과정의 수분 변화와 영양소 손실을 반영한 **추정치**입니다.")
+        weight_basis_mode = render_weight_basis_selector(st, "review_weight_basis_mode")
 
         cooking_method_input = st.radio(
             "조리 방법",
@@ -1144,9 +1161,7 @@ with tab_user:
         </div>
         """, unsafe_allow_html=True)
 
-        render_cooking_policy(st, cooking_method_input)
         cooked_selected = st.multiselect("재료 선택 (화식 — 뼈고기 제외)", cooked_foods, key="cooked_selected")
-        st.caption(WEIGHT_BASIS_NOTE)
         cooked_amounts = {}
         if cooked_selected:
             cols = st.columns(3)
@@ -1339,6 +1354,7 @@ with tab_user:
                 "water_intake", "activity_memo", "question", "snack_input", "order_number")}
             original_input.update(auth_phone=st.session_state.get("auth_phone", ""),
                 diet_type=diet_type, cooking_method=cooking_method_input, amounts=dict(active_amounts),
+                weight_basis_mode=weight_basis_mode,
                 selected=list(active_selected), extra_items=list(extra_items),
                 kelp_enabled=use_kelp, kelp_iodine_mcg=kelp_iodine_total,
                 calcium_inputs={"eggshell_enabled": use_egg, "eggshell_g": egg_g, "eggshell_ca_mg_per_g": egg_ca,
@@ -1346,6 +1362,7 @@ with tab_user:
                 photo_submission="카카오채널")
             nutrition_request = make_request(active_amounts, cooked=is_cooked, method=cooking_method_input,
                 weight=dog_weight, activity=activity, kelp=kelp_iodine_total, calcium=ca_supplement_total,
+                weight_basis_mode=weight_basis_mode,
                 supplements={"kelp_enabled": use_kelp, "iodine_mcg": kelp_iodine_total,
                              "calcium_inputs": original_input["calcium_inputs"]},
                 original_fields=original_input, excluded=extra_items + ([{"snacks_text": snack_input}] if snack_input else []))
@@ -1367,7 +1384,9 @@ with tab_user:
                 for nutri, std in aafco_standards.items():
                     val_1000 = nutrition_result["per_1000kcal"][nutri]
                     min_v, max_v = std['min'], std['max']
-                    if basic_judgments(nutrition_result, "review")[nutri] == "low":
+                    if basic_judgments(nutrition_result, "review")[nutri] == "unavailable":
+                        status = "⚪ 판정 보류 (미등록 포함)"
+                    elif basic_judgments(nutrition_result, "review")[nutri] == "low":
                         status = "❌ 부족"
                     elif basic_judgments(nutrition_result, "review")[nutri] == "high":
                         status = "⚠️ 과잉"
@@ -1375,11 +1394,11 @@ with tab_user:
                         status = "✅ 적합"
                     res_data.append({
                         "영양소": nutri,
-                        "현재(1000kcal당)": f"{val_1000:.2f}",
+                        "현재(1000kcal당)": nutrient_value_text(nutrition_result, nutri),
                         "AAFCO 최소": str(min_v),
                         "판정": status
                     })
-                    aafco_summary[nutri] = f"{val_1000:.2f} ({status})"
+                    aafco_summary[nutri] = f"{nutrient_value_text(nutrition_result, nutri)} ({status})"
 
             # ── 구글 시트 저장 ────────────────────────────────────────────────
             auth_ph = st.session_state.get("auth_phone", "unknown")

@@ -4,6 +4,10 @@ from nutrition_core import catalog_data, retention, standards
 PRECOOKED_ITEMS = frozenset(catalog_data()["PRECOOKED_ITEMS"])
 FRUIT_RAW_ITEMS = frozenset(catalog_data()["FRUIT_RAW_ITEMS"])
 PREPARED_PUREE_ITEMS = frozenset(catalog_data()["PREPARED_PUREE_ITEMS"])
+WEIGHT_BASIS_OPTIONS = {
+    "조리 전 재료 무게": "raw_input",
+    "이미 익힌 음식 실제 무게": "cooked_input",
+}
 WEIGHT_BASIS_NOTE = (
     "입력 기준: 익힌 굴·홍합은 익힌 상태의 중량을 사용합니다. 그 외 재료는 현재 계산의 "
     "조리 전 기준 중량을 입력합니다. 과일 6종은 화식에서도 생과일 급여량 그대로 사용하고, "
@@ -15,6 +19,22 @@ WEIGHT_BASIS_NOTE = (
 def weight_label(name):
     suffix = "익힌 무게 (g)" if name in PRECOOKED_ITEMS else "입력 중량 (g)"
     return f"{name} {suffix}"
+
+
+def render_weight_basis_selector(st, key):
+    st.caption("무게 입력 기준을 선택해주세요.")
+    label = st.radio(
+        "어떤 기준으로 무게를 입력하시나요?",
+        list(WEIGHT_BASIS_OPTIONS),
+        index=0,
+        key=key,
+    )
+    if WEIGHT_BASIS_OPTIONS[label] == "raw_input":
+        st.caption("생고기·생내장 등 조리 전 무게를 입력합니다.")
+    else:
+        st.caption("시판 화식이나 이미 조리가 끝난 음식의 실제 급여 무게를 입력합니다.")
+    st.caption("퓨레·과일·이미 익힌 재료는 실제 급여한 무게를 입력합니다.")
+    return WEIGHT_BASIS_OPTIONS[label]
 
 
 def render_data_warnings(st, result):
@@ -87,3 +107,18 @@ def render_cooking_policy(st, method):
         "익힌 굴·홍합은 수율과 보존율을 모두 추가 적용하지 않습니다. "
         "실제 조리 후 중량 입력은 중량 표시에만 반영됩니다."
     )
+
+
+def render_admin_policy(st, result, profile, method=None, reference=None):
+    with st.expander("🛠 계산 기준 및 정책 보기", expanded=False):
+        st.caption(
+            f"엔진: {result['engine_version']} | DB: {result['food_db_version']} | "
+            f"계산 정책: {result['calculation_policy_version']}"
+        )
+        render_scope(st, profile, reference=reference)
+        if method and method != "생식":
+            render_cooking_policy(st, method)
+        st.caption(
+            "아미노산·오메가 및 신규 과일의 미등록 영양소는 등록분만 합산하며, "
+            "미등록은 실제 함량 0으로 해석하지 않습니다."
+        )
