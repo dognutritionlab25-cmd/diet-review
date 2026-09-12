@@ -7,7 +7,7 @@ import json
 import math
 from pathlib import Path
 
-ENGINE_VERSION = '1.2.0-prepared-puree-weight'
+ENGINE_VERSION = '1.3.1-cooked-input-raw-equivalent'
 _DATA = json.loads(Path(__file__).with_name('catalog.json').read_text())
 
 def canonical_json(value):
@@ -30,6 +30,10 @@ _POLICY = {
     'raw_fruit_cooking':'input grams; no yield, retention or actual cooked weight override',
     'prepared_puree':_DATA['PREPARED_PUREE_ITEMS'],
     'prepared_puree_cooking':'finished puree input grams; no yield or actual cooked weight override; existing nutrient calculations unchanged',
+    'weight_basis_modes':{
+        'raw_input':'legacy pre-cooking input grams; existing cooking yield and retention policy',
+        'cooked_input':'actual cooked serving grams; nutrient base is input grams divided by existing cooking yield, then existing retention policy; no actual cooked weight override',
+    },
     'new_fruit_missing':'null contribution; registered subtotal plus nutrient_missing coverage; judgment unavailable',
     'standards':{
         'calculator':_DATA['aafco_standards'],
@@ -75,9 +79,11 @@ def energy_requirements(weight, activity):
 
 def make_request(amounts, *, cooked=False, method='삶기', weight=3.0, activity=1.6,
                  kelp=0, calcium=0, epa=0, dha=0, omega_unit='mg',
-                 actual_weights=None, supplements=None, original_fields=None, excluded=None):
+                 actual_weights=None, supplements=None, original_fields=None, excluded=None,
+                 weight_basis_mode=None):
     if omega_unit not in ('mg','g'):raise ValueError('Unsupported omega unit')
-    return {'schema_version':'diet-input-v1','weight_kg':weight,'activity_factor':activity,
+    if weight_basis_mode is not None and weight_basis_mode not in ('raw_input','cooked_input'):raise ValueError('Unsupported weight basis mode')
+    request={'schema_version':'diet-input-v1','weight_kg':weight,'activity_factor':activity,
             'mode':'cooked' if cooked else 'raw','method':method if cooked else '생식',
             'items':[{'name':n,'grams':g,'weight_basis':'cooked' if n in _DATA['PRECOOKED_ITEMS'] else 'raw',
                       'actual_cooked_g':(actual_weights or {}).get(n)} for n,g in amounts.items()],
@@ -85,6 +91,52 @@ def make_request(amounts, *, cooked=False, method='삶기', weight=3.0, activity
                                  'epa':epa,'dha':dha,'omega_unit':omega_unit},
             'supplement_inputs':deepcopy(supplements or {}),
             'original_fields':deepcopy(original_fields or {}),'excluded':deepcopy(excluded or [])}
+    if weight_basis_mode is not None:request['weight_basis_mode']=weight_basis_mode
+    return request
+
+def _weight_application(item,row,cooked,method,weight_basis_mode):
+    name=item['name'];g=number(item['grams'],'grams');cat=row['category']
+    precooked=name in _DATA['PRECOOKED_ITEMS']
+    raw_fruit=name in _DATA['FRUIT_RAW_ITEMS']
+    prepared_puree=name in _DATA['PREPARED_PUREE_ITEMS']
+    fixed_weight=raw_fruit or prepared_puree
+    actual=item.get('actual_cooked_g')
+    if actual is not None:actual=number(actual,'actual cooked grams')
+    cooked_input=cooked and weight_basis_mode=='cooked_input'
+    yield_ratio=_DATA['COOKING_YIELD'][method][cat] if cooked and not precooked and not fixed_weight else 1.
+    if yield_ratio<=0:raise ValueError('Cooking yield must be positive')
+    nutrition_base_g=g/yield_ratio if cooked_input and not precooked and not fixed_weight else g
+    predicted=g if not cooked or precooked or fixed_weight or cooked_input else round(g*_DATA['COOKING_YIELD'][method][cat])
+    if cooked and actual is not None and not precooked and not fixed_weight and not cooked_input:
+        applied=actual
+        basis='기존 실측 조리 중량'
+    else:
+        applied=predicted
+        if not cooked:basis='생식 입력량'
+        elif precooked:basis='기등록 익힌 재료 실제 급여량'
+        elif raw_fruit:basis='생과일 실제 급여량'
+        elif prepared_puree:basis='완성 퓨레'
+        elif cooked_input:basis='익힌 실제 무게'
+        else:basis='조리 전 재료 무게'
+    return {'input_grams':g,'applied_grams':applied,'nutrition_base_grams':nutrition_base_g,'input_basis':basis}
+
+def weight_applications(request):
+    """Return display-only input/applied weights using the same engine path as calculate()."""
+    req=deepcopy(request)
+    if req.get('schema_version')!='diet-input-v1':raise ValueError('Unknown input schema')
+    if req.get('mode') not in ('raw','cooked'):raise ValueError('Unknown diet mode')
+    cooked=req['mode']=='cooked';method=req['method']
+    if cooked and method not in _DATA['RETENTION']:raise ValueError('Unknown cooking method')
+    weight_basis_mode=req.get('weight_basis_mode','raw_input')
+    if weight_basis_mode not in ('raw_input','cooked_input'):raise ValueError('Unsupported weight basis mode')
+    foods={x['재료명']:x for x in _DATA['db_data']}
+    rows=[]
+    for item in req['items']:
+        name=item['name']
+        if name not in foods:raise ValueError('Unknown food: '+name)
+        applied=_weight_application(item,foods[name],cooked,method,weight_basis_mode)
+        rows.append({'name':name,**applied})
+    return rows
 
 def calculate(request,profile='review'):
     req=deepcopy(request)
@@ -94,6 +146,8 @@ def calculate(request,profile='review'):
     if weight<=0 or activity<=0:raise ValueError('Weight/activity must be positive')
     if req['mode'] not in ('raw','cooked'):raise ValueError('Unknown diet mode')
     cooked=req['mode']=='cooked'; method=req['method']
+    weight_basis_mode=req.get('weight_basis_mode','raw_input')
+    if weight_basis_mode not in ('raw_input','cooked_input'):raise ValueError('Unsupported weight basis mode')
     if cooked and method not in _DATA['RETENTION']:raise ValueError('Unknown cooking method')
     foods={x['재료명']:x for x in _DATA['db_data']}
     nutrients={k:0.0 for k in std}; kcal=0.; grams_total=0.; cooked_total=0.
@@ -111,13 +165,11 @@ def calculate(request,profile='review'):
         if cooked and cat=='bone':raise ValueError('Bone item not allowed in cooked mode')
         expected_basis='cooked' if precooked else 'raw'
         if item.get('weight_basis')!=expected_basis:raise ValueError('Weight basis incompatible with legacy food profile')
-        actual=item.get('actual_cooked_g')
-        if actual is not None:actual=number(actual,'actual cooked grams')
+        applied_weight=_weight_application(item,row,cooked,method,weight_basis_mode)
         grams_total+=g
-        predicted=g if not cooked or precooked or fixed_weight else round(g*_DATA['COOKING_YIELD'][method][cat])
-        cooked_total+=actual if cooked and actual is not None and not precooked and not fixed_weight else predicted
+        cooked_total+=applied_weight['applied_grams']
         if g<=0:continue
-        factor=g/100; nk={}; kcal+=row['칼로리']*factor
+        factor=applied_weight['nutrition_base_grams']/100; nk={}; kcal+=row['칼로리']*factor
         for key in nutrients:
             field=key if key in row else key.split('(')[0]
             if raw_fruit and row[field] is None:
