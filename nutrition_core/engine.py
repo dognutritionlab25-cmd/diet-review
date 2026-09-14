@@ -7,7 +7,7 @@ import json
 import math
 from pathlib import Path
 
-ENGINE_VERSION = '1.3.1-cooked-input-raw-equivalent'
+ENGINE_VERSION = '1.5.0-fish-amino-source-aligned'
 _DATA = json.loads(Path(__file__).with_name('catalog.json').read_text())
 
 def canonical_json(value):
@@ -16,7 +16,7 @@ def canonical_json(value):
 def digest(value):
     return hashlib.sha256(canonical_json(value).encode()).hexdigest()
 
-FOOD_DB_VERSION = 'food-' + digest({k:_DATA[k] for k in ['db_data','omega_db','amino_db','amino_name_map','FRUIT_RAW_ITEMS','PREPARED_PUREE_ITEMS']})[:16]
+FOOD_DB_VERSION = 'food-' + digest({k:_DATA[k] for k in ['db_data','omega_db','amino_db','amino_name_map','FRUIT_RAW_ITEMS','PREPARED_PUREE_ITEMS','FISH_SOURCE_METADATA','AMINO_SOURCE_METADATA']})[:16]
 ENGINE_SOURCE_HASH = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 _POLICY = {
     'version':'stage1-legacy-effective-v1',
@@ -35,6 +35,14 @@ _POLICY = {
         'cooked_input':'actual cooked serving grams; nutrient base is input grams divided by existing cooking yield, then existing retention policy; no actual cooked weight override',
     },
     'new_fruit_missing':'null contribution; registered subtotal plus nutrient_missing coverage; judgment unavailable',
+    'fish_source_alignment':{
+        'foods':['연어 (Salmon)','고등어 (Mackerel)','정어리 (Sardine, 생/생식용)'],
+        'source':'MEXT 10144/10154/10047; edible portion per 100g',
+        'omega_totals':'official n-6/n-3 family aggregates; ratio derived from totals',
+        'vitamin_A':'animal preformed retinol mcg / 0.3 = IU',
+        'vitamin_D':'mcg * 40 = IU',
+        'vitamin_E':'natural alpha-tocopherol mg / 0.67 = IU',
+    },
     'standards':{
         'calculator':_DATA['aafco_standards'],
         'review':{**_DATA['aafco_standards'],'요오드(mcg)':{'min':220,'max':1400}},
