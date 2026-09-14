@@ -16,7 +16,7 @@ def canonical_json(value):
 def digest(value):
     return hashlib.sha256(canonical_json(value).encode()).hexdigest()
 
-FOOD_DB_VERSION = 'food-' + digest({k:_DATA[k] for k in ['db_data','omega_db','amino_db','amino_name_map','FRUIT_RAW_ITEMS','PREPARED_PUREE_ITEMS','FISH_SOURCE_METADATA','AMINO_SOURCE_METADATA']})[:16]
+FOOD_DB_VERSION = 'food-' + digest({k:_DATA[k] for k in ['db_data','omega_db','amino_db','amino_name_map','FRUIT_RAW_ITEMS','PREPARED_PUREE_ITEMS','FISH_SOURCE_METADATA','AMINO_SOURCE_METADATA','OMEGA_SOURCE_METADATA','LEGACY_FOOD_ALIASES','LEGACY_SNAPSHOT_FOODS']})[:16]
 ENGINE_SOURCE_HASH = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 _POLICY = {
     'version':'stage1-legacy-effective-v1',
@@ -59,6 +59,21 @@ UNRESOLVED_NUTRITION_POLICY = [
 ]
 
 def catalog_data(): return deepcopy(_DATA)
+
+def _food_rows():
+    """Live catalog plus legacy-only rows needed to render old snapshots."""
+    rows={x['재료명']:x for x in _DATA['db_data']}
+    for old,new in _DATA.get('LEGACY_FOOD_ALIASES',{}).items():
+        if new in rows:rows[old]=rows[new]
+    for name,record in _DATA.get('LEGACY_SNAPSHOT_FOODS',{}).items():
+        rows.setdefault(name,record['row'])
+    return rows
+
+def _omega_row(name):
+    effective=_DATA.get('LEGACY_FOOD_ALIASES',{}).get(name,name)
+    if effective in _DATA['omega_db']:return _DATA['omega_db'][effective]
+    legacy=_DATA.get('LEGACY_SNAPSHOT_FOODS',{}).get(name,{})
+    return legacy.get('omega')
 def policy_data(): return deepcopy(_POLICY)
 def standards(profile):
     if profile not in _POLICY['standards']:raise ValueError('Unknown profile')
@@ -137,7 +152,7 @@ def weight_applications(request):
     if cooked and method not in _DATA['RETENTION']:raise ValueError('Unknown cooking method')
     weight_basis_mode=req.get('weight_basis_mode','raw_input')
     if weight_basis_mode not in ('raw_input','cooked_input'):raise ValueError('Unsupported weight basis mode')
-    foods={x['재료명']:x for x in _DATA['db_data']}
+    foods=_food_rows()
     rows=[]
     for item in req['items']:
         name=item['name']
@@ -157,7 +172,7 @@ def calculate(request,profile='review'):
     weight_basis_mode=req.get('weight_basis_mode','raw_input')
     if weight_basis_mode not in ('raw_input','cooked_input'):raise ValueError('Unsupported weight basis mode')
     if cooked and method not in _DATA['RETENTION']:raise ValueError('Unknown cooking method')
-    foods={x['재료명']:x for x in _DATA['db_data']}
+    foods=_food_rows()
     nutrients={k:0.0 for k in std}; kcal=0.; grams_total=0.; cooked_total=0.
     mass={'actual_bone':0.,'muscle_meat':0.,'organ':0.,'veggie':0.}
     aa={k:0. for k in next(iter(_DATA['amino_db'].values()))}
@@ -195,8 +210,9 @@ def calculate(request,profile='review'):
             rf=retention('단백질(g)',method) if cooked and cat!='veggie' and not precooked and not raw_fruit else 1.
             for key,v in _DATA['amino_db'][aa_key].items():aa[key]+=v*factor*rf
         else:missing_aa.append(name)
-        if name in _DATA['omega_db']:
-            o6,o3,*_=_DATA['omega_db'][name]
+        omega_row=_omega_row(name)
+        if omega_row is not None:
+            o6,o3,*_=omega_row
             rf=retention('오메가3',method) if cooked and cat!='veggie' and not precooked and not raw_fruit else 1.
             omega6+=o6*factor;omega3+=o3*factor*rf
             if o6+o3>row['지방']:data_warnings.append({'food':name,'code':'FATTY_ACIDS_EXCEED_TOTAL_FAT'})

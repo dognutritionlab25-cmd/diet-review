@@ -295,7 +295,6 @@
     "말고기 (Horse Meat)": "말고기(lean,생)",
     "사슴고기 (Venison)": "사슴고기(lean,생)",
     "정어리 (Sardine, 생/생식용)": "정어리(생)",
-    "정어리 (Sardine, 뼈제외/가식부/화식용)": null,
     "정어리 (Sardine, 전체/뼈포함/무염통조림/화식용)": null,
     "계란노른자 (Egg Yolk)": "계란노른자(생)",
     "소간 (Beef Liver)": "소간(생)",
@@ -340,10 +339,9 @@
     "양배추 퓨레 (Cabbage)": null,
     "배추 퓨레 (Napa Cabbage)": null,
     "소목뼈 (Beef Neck Bone, 뼈 37%)": null,
-    "캥거루 사태 (Kangaroo Shank)": null,
+    "캥거루 고기 (Kangaroo Meat)": null,
     "오리 울대 (Duck Esophagus)": null,
     "아몬드 가루 ⚠️ (Almond Flour)": null,
-    "햄프씨드 (Hemp Seeds)": null,
     "호박씨 가루 (Pumpkin Seeds)": null,
     "크랜베리 (Cranberry)": null,
     "케일 퓨레 (Kale)": null,
@@ -533,12 +531,6 @@
       "0.13333333333333333:1",
       "MEXT 10047 Sardinops melanostictus raw; official n-6/n-3 family aggregates; edible portion per 100g"
     ],
-    "정어리 (Sardine, 뼈제외/가식부/화식용)": [
-      0.11,
-      1.48,
-      "0.07:1",
-      "USDA 175139 EPA+DHA+ALA 합산 (생 기준 근사 적용)"
-    ],
     "정어리 (Sardine, 전체/뼈포함/무염통조림/화식용)": [
       0.11,
       1.48,
@@ -689,11 +681,11 @@
       "7:1",
       "포유류 뼈고기 추정값"
     ],
-    "캥거루 사태 (Kangaroo Shank)": [
-      0.05,
-      0.18,
-      "0.28:1",
-      "AFCD FSANZ F009791 long chain omega3 54mg/100g"
+    "캥거루 고기 (Kangaroo Meat)": [
+      0.25512,
+      0.10404,
+      "derived",
+      "AFCD Release 3 F009791; n-6/n-3 component totals"
     ],
     "오리 울대 (Duck Esophagus)": [
       0.16,
@@ -702,22 +694,16 @@
       "오리 가슴살 유사 추정"
     ],
     "아몬드 가루 ⚠️ (Almond Flour)": [
+      12.322,
       0.003,
-      12.3,
-      "0.0002:1",
-      "USDA FDC 170567 almonds raw"
-    ],
-    "햄프씨드 (Hemp Seeds)": [
-      8.71,
-      27.36,
-      "0.32:1",
-      "USDA FDC 170148 hemp seed hulled ALA+linoleic"
+      "derived",
+      "USDA FDC 170567 raw almonds; n-6/n-3 component totals"
     ],
     "호박씨 가루 (Pumpkin Seeds)": [
+      20.671,
       0.12,
-      20.7,
-      "0.006:1",
-      "USDA FDC 170556 pumpkin seeds"
+      "derived",
+      "USDA FDC 170556 dried pumpkin/squash seed kernels; n-6/n-3 component totals"
     ],
     "크랜베리 (Cranberry)": [
       0.101,
@@ -1342,25 +1328,6 @@
       "비타민E": 3.7313432835820897,
       "나트륨": 81,
       "요오드(mcg)": 24
-    },
-    {
-      "재료명": "정어리 (Sardine, 뼈제외/가식부/화식용)",
-      "category": "meat",
-      "bone_pct": 0,
-      "칼로리": 182,
-      "단백질": 22.4,
-      "지방": 8.7,
-      "칼슘": 82,
-      "인": 250,
-      "철": 2.3,
-      "아연": 1.7,
-      "구리": 0.23,
-      "망간": 0.06,
-      "비타민A": 16.7,
-      "비타민D": 520,
-      "비타민E": 1.94,
-      "나트륨": 80,
-      "요오드(mcg)": 0
     },
     {
       "재료명": "정어리 (Sardine, 전체/뼈포함/무염통조림/화식용)",
@@ -2029,7 +1996,7 @@
       "요오드(mcg)": 0
     },
     {
-      "재료명": "캥거루 사태 (Kangaroo Shank)",
+      "재료명": "캥거루 고기 (Kangaroo Meat)",
       "category": "meat",
       "bone_pct": 0,
       "칼로리": 102,
@@ -2084,25 +2051,6 @@
       "비타민E": 12.69,
       "나트륨": 6,
       "요오드(mcg)": 0.57
-    },
-    {
-      "재료명": "햄프씨드 (Hemp Seeds)",
-      "category": "veggie",
-      "bone_pct": 0,
-      "칼로리": 553,
-      "단백질": 31.6,
-      "지방": 48.8,
-      "칼슘": 70,
-      "인": 1650,
-      "철": 8.0,
-      "아연": 9.9,
-      "구리": 1.6,
-      "망간": 7.6,
-      "비타민A": 11,
-      "비타민D": 0,
-      "비타민E": 0.8,
-      "나트륨": 5,
-      "요오드(mcg)": 0
     },
     {
       "재료명": "호박씨 가루 (Pumpkin Seeds)",
@@ -2490,6 +2438,16 @@
       }
     }
   ],
+  "LEGACY_FOOD_ALIASES": {"캥거루 사태 (Kangaroo Shank)": "캥거루 고기 (Kangaroo Meat)"},
+  "LEGACY_SNAPSHOT_FOODS": {
+    "정어리 (Sardine, 뼈제외/가식부/화식용)": {"row":{"재료명":"정어리 (Sardine, 뼈제외/가식부/화식용)","category":"meat","bone_pct":0,"칼로리":182,"단백질":22.4,"지방":8.7,"칼슘":82,"인":250,"철":2.3,"아연":1.7,"구리":0.23,"망간":0.06,"비타민A":16.7,"비타민D":520,"비타민E":1.94,"나트륨":80,"요오드(mcg)":0},"omega":[0.11,1.48,"0.07:1","USDA 175139 EPA+DHA+ALA 합산 (생 기준 근사 적용)"],"scope":"legacy_snapshot_only"},
+    "햄프씨드 (Hemp Seeds)": {"row":{"재료명":"햄프씨드 (Hemp Seeds)","category":"veggie","bone_pct":0,"칼로리":553,"단백질":31.6,"지방":48.8,"칼슘":70,"인":1650,"철":8,"아연":9.9,"구리":1.6,"망간":7.6,"비타민A":11,"비타민D":0,"비타민E":0.8,"나트륨":5,"요오드(mcg)":0},"omega":[8.71,27.36,"0.32:1","USDA FDC 170148 hemp seed hulled ALA+linoleic"],"scope":"legacy_snapshot_only"}
+  },
+  "OMEGA_SOURCE_METADATA": {
+    "아몬드 가루 ⚠️ (Almond Flour)":{"source_database":"USDA FoodData Central SR Legacy","source_id":"170567","source_state":"raw whole almonds; accepted for simple ground almond","basis":"g per 100 g edible food","omega6_g":12.322,"omega3_g":0.003,"included_omega6":[{"name":"LA 18:2 n-6","g":12.32},{"name":"20:2 n-6","g":0.002}],"included_omega3":[{"name":"ALA 18:3 n-3","g":0.003}],"excluded_unclassified":[{"name":"CLA","g":0.002}],"ratio_is_derived":true},
+    "호박씨 가루 (Pumpkin Seeds)":{"source_database":"USDA FoodData Central SR Legacy","source_id":"170556","source_state":"dried pumpkin/squash seed kernels; accepted for simple ground seed","basis":"g per 100 g edible food","omega6_g":20.671,"omega3_g":0.12,"included_omega6":[{"name":"LA 18:2 n-6","g":20.667},{"name":"20:2 n-6","g":0.004}],"included_omega3":[{"name":"ALA 18:3 n-3","g":0.12}],"explicit_zero":["20:3 n-3","EPA","DPA","DHA"],"excluded_unclassified":["20:4","22:4","CLA"],"ratio_is_derived":true},
+    "캥거루 고기 (Kangaroo Meat)":{"source_database":"Australian Food Composition Database Release 3","source_id":"F009791","source_state":"Kangaroo steak, as purchased, raw; lean rump/loin composite","basis":"g per 100 g analytical sample; 0% waste","omega6_g":0.25512,"omega3_g":0.10404,"included_omega6":[{"name":"LA","g":0.18},{"name":"GLA","g":0.00092},{"name":"AA","g":0.0742}],"included_omega3":[{"name":"ALA","g":0.05},{"name":"EPA","g":0.02107},{"name":"DPA","g":0.02656},{"name":"DHA","g":0.00641}],"ratio_is_derived":true}
+  },
   "FISH_SOURCE_METADATA": {
     "연어 (Salmon)": {
       "ui_name": "연어",
