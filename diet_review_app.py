@@ -30,6 +30,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] {border-radius:14px;}
 div[data-testid="stRadio"] {padding:0.15rem 0 0.35rem;}
 .guardian-note {background:#fffaf2;border:1px solid #f0dfc7;border-radius:12px;padding:0.75rem 1rem;color:#5b4a3c;margin:0.35rem 0 0.9rem;}
 .kelp-box {background:#f5fbf7;border:1px solid #bcdcc6;border-radius:14px;padding:1rem 1.1rem;margin:1rem 0;}
+div[data-testid="stAppViewContainer"] {background-color:#fcfaf5;background-image:radial-gradient(circle at 18px 18px, rgba(126,151,120,.075) 1px, transparent 1.5px);background-size:72px 72px;}
+div[data-testid="stAppViewContainer"] p, div[data-testid="stAppViewContainer"] li, div[data-testid="stAppViewContainer"] label {color:#3e3a34;}
+.ingredient-guide {background:#fffaf0;border:1px solid #e6d8bc;border-radius:14px;padding:1rem 1.15rem;margin:.7rem 0 1rem;line-height:1.75;color:#38352f;}
+.ingredient-guide b {color:#5a4030;}
+.completion-fluffy {width:112px;height:auto;object-fit:contain;flex:0 0 auto;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -48,8 +53,15 @@ def _qr_b64(path="qr.png"):
             return _b64.b64encode(f.read()).decode()
     return None
 
+def _fluffy_b64(path="fluffy.png"):
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return _b64.b64encode(f.read()).decode()
+    return None
+
 _logo = _logo_b64()
 _qr   = _qr_b64()
+_fluffy = _fluffy_b64()
 
 if _logo:
     st.markdown(f"""
@@ -1120,7 +1132,8 @@ with tab_user:
         </div>
         """, unsafe_allow_html=True)
 
-        selected = st.multiselect("재료 선택", all_foods, key="raw_selected")
+        st.markdown('''<div class="ingredient-guide"><b>🥩 식재료 입력 방법</b><br>① 아래 <b>「재료 선택」</b> 칸을 클릭하세요.<br>② 현재 급여 중인 식재료를 목록에서 모두 선택하세요. 여러 개를 선택할 수 있습니다.<br>③ 선택하면 바로 아래에 각 식재료의 급여량 입력칸이 나타납니다.<br>④ 하루에 먹이는 양을 <b>g(그램)</b>으로 입력해주세요.<br><span style="font-size:.94rem">예: 닭목뼈 50g · 소고기 100g · 블루베리 10g<br>목록에 원하는 재료가 없다면 아래 「DB에 없는 재료 직접 입력」에 적어주세요.</span></div>''', unsafe_allow_html=True)
+        selected = st.multiselect("재료 선택 · 여기를 클릭하여 급여 중인 재료를 선택하세요", all_foods, key="raw_selected")
         amounts = {}
         if selected:
             cols = st.columns(3)
@@ -1153,7 +1166,8 @@ with tab_user:
         </div>
         """, unsafe_allow_html=True)
 
-        cooked_selected = st.multiselect("재료 선택 (화식 — 뼈고기 제외)", cooked_foods, key="cooked_selected")
+        st.markdown('''<div class="ingredient-guide"><b>🥩 식재료 입력 방법</b><br>① 아래 <b>「재료 선택」</b> 칸을 클릭하세요.<br>② 오늘 급여한 재료를 모두 선택하세요. 여러 개를 선택할 수 있습니다.<br>③ 선택하면 바로 아래에 각 재료의 급여량 입력칸이 나타납니다.<br>④ 하루 급여량을 <b>g(그램)</b>으로 입력해주세요.<br><span style="font-size:.94rem">목록에 원하는 재료가 없다면 아래 「DB에 없는 재료 직접 입력」에 적어주세요.</span></div>''', unsafe_allow_html=True)
+        cooked_selected = st.multiselect("재료 선택 · 여기를 클릭하여 급여 중인 재료를 선택하세요 (뼈고기 제외)", cooked_foods, key="cooked_selected")
         cooked_amounts = {}
         if cooked_selected:
             cols = st.columns(3)
@@ -1187,7 +1201,7 @@ with tab_user:
 
     # 추가 직접 입력 (생식/화식 공통)
     st.markdown("#### ➕ DB에 없는 재료 직접 입력 (선택, 최대 3개)")
-    st.caption("위 목록에 완전히 해당하는 재료가 없을 때만 입력해주세요. 영양 계산에는 반영되지 않으며 전문가 검토 시 참고합니다.")
+    st.caption("목록에서 찾을 수 없는 재료가 있을 때만 입력해주세요. 입력하신 재료는 최종 식단 검토 시 함께 확인합니다. 최대 3개까지 입력할 수 있습니다.")
 
     MAX_EXTRA = 3
     if "extra_rows" not in st.session_state:
@@ -1298,8 +1312,11 @@ with tab_user:
     if st.session_state.submitted:
         name = st.session_state.get('submitted_name', '')
         st.success(f"✅ {name} 보호자님, 신청이 완료되었습니다.")
+        fluffy_tag = f'<img class="completion-fluffy" src="data:image/png;base64,{_fluffy}" alt="플러피" />' if _fluffy else ''
         st.markdown(f"""
-    <div style="background:#f8fffe; border:1.5px solid #74c69d; border-radius:14px; padding:1.8rem 2rem; margin:1rem 0; line-height:2;">
+    <div style="background:#fffdf8; border:1.5px solid #9fc8aa; border-radius:16px; padding:1.5rem 1.7rem; margin:1rem 0; line-height:2;">
+      <div style="display:flex; align-items:flex-end; gap:1rem; flex-wrap:wrap;">
+      <div style="flex:1; min-width:220px;">
         <p style="font-size:1.05rem; color:#222; margin:0;">
             식단 검토 결과는 <b>영업일 기준 5일 이내</b> 등록해주신 이메일로 보내드립니다.<br>
             모든 식단은 직접 검토하여 개별적으로 작성하기 때문에,<br>
@@ -1317,6 +1334,7 @@ with tab_user:
         </p>
         <hr style="border:none; border-top:1px solid #d0ece4; margin:1.2rem 0;">
         <p style="font-size:1rem; color:#444; margin:0;">감사합니다. 🐾</p>
+      </div>{fluffy_tag}</div>
     </div>
     """, unsafe_allow_html=True)
         if st.button("🔄 새 신청서 작성", use_container_width=True):
