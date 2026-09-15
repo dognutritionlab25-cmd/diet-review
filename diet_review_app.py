@@ -24,6 +24,15 @@ st.set_page_config(
     layout="wide"
 )
 
+st.markdown("""
+<style>
+div[data-testid="stVerticalBlockBorderWrapper"] {border-radius:14px;}
+div[data-testid="stRadio"] {padding:0.15rem 0 0.35rem;}
+.guardian-note {background:#fffaf2;border:1px solid #f0dfc7;border-radius:12px;padding:0.75rem 1rem;color:#5b4a3c;margin:0.35rem 0 0.9rem;}
+.kelp-box {background:#f5fbf7;border:1px solid #bcdcc6;border-radius:14px;padding:1rem 1.1rem;margin:1rem 0;}
+</style>
+""", unsafe_allow_html=True)
+
 # ── 브랜딩 헤더 ──────────────────────────────────────────────────────────
 import os, base64 as _b64
 
@@ -1027,7 +1036,7 @@ with tab_user:
     diet_photo = None
 
     # ── 체형(BCS) 체크리스트 ─────────────────────────────────────────────
-    st.markdown("**📏 체형(BCS) — 해당하는 항목을 선택해주세요**")
+    st.markdown("**📏 체형(BCS) · 필수**")
     bcs_options = [
         "갈비뼈가 살짝 만져지고 허리 라인이 보입니다. (적정)",
         "갈비뼈는 만져지지만 지방이 약간 느껴집니다.",
@@ -1035,18 +1044,17 @@ with tab_user:
         "갈비뼈가 쉽게 만져지고 허리가 많이 들어가 있습니다.",
         "잘 모르겠습니다.",
     ]
-    bcs_selected = []
-    for opt in bcs_options:
-        if st.checkbox(opt, key=f"bcs_{opt}"):
-            bcs_selected.append(opt)
-    body_condition = ", ".join(bcs_selected) if bcs_selected else ""
+    body_condition = st.radio(
+        "체형(BCS) 선택", bcs_options, index=None, key="body_condition",
+        label_visibility="collapsed"
+    )
 
     # ── 최근 6개월 체중 변화 ──────────────────────────────────────────────
-    st.markdown("**⚖️ 최근 6개월 체중 변화**")
+    st.markdown("**⚖️ 최근 6개월 체중 변화 · 필수**")
     weight_change = st.radio(
         "체중 변화",
         ["변화 없음", "증가", "감소"],
-        horizontal=True,
+        horizontal=True, index=None,
         label_visibility="collapsed"
     )
     weight_change_detail = ""
@@ -1100,22 +1108,6 @@ with tab_user:
 
     all_foods = food_df['재료명'].tolist()
     cooked_foods = food_df[food_df['category'] != 'bone']['재료명'].tolist()
-
-    # 켈프 (말린 보충제) — 요오드 총량 직접 입력 방식
-    # 생켈프 DB값과 실제 급여되는 말린 보충제(캡슐/파우더)는 요오드 농도가 크게 다르고
-    # 제품마다 편차도 매우 커서, "오늘 급여한 요오드 총량"을 바로 입력하는 방식으로 처리함.
-    use_kelp = st.checkbox("켈프 (말린 보충제)", key="c_use_kelp")
-    kelp_iodine_total = 0.0
-    if use_kelp:
-        kelp_iodine_total = st.number_input(
-            "오늘 급여한 켈프 요오드 총량 (mcg)", 0.0, 5000.0, 0.0, step=10.0, key="c_kelp_iodine_total"
-        )
-        st.caption(
-            "🌿 제품 라벨의 '1회 제공량당 요오드(mcg)'를 보고, 오늘 실제로 급여한 만큼 계산해서 넣어주세요.\n\n"
-            "예: 나우푸드 켈프 1정 = 요오드 150mcg → 1정을 통째로 줬다면 150 입력, 1/4정만 줬다면 37.5 입력.\n\n"
-            "파우더 제품은 (급여한 g수) × (라벨의 g당 요오드 mcg)로 계산해서 넣어주세요. "
-            "요오드 함량이 라벨에 없는 제품은 사용을 권장하지 않습니다."
-        )
 
     # ── 생식 입력 ──────────────────────────────────────────────────────────────
     if not is_cooked:
@@ -1224,6 +1216,16 @@ with tab_user:
     else:
         st.caption("✋ 최대 3개까지 입력 가능합니다.")
 
+    # 말린 켈프 보충제는 일반 DB 재료와 구분해, 라벨의 요오드 총량으로 기존 계산 경로에 전달한다.
+    st.markdown('<div class="kelp-box"><b>🌿 켈프를 급여하고 있나요?</b><br><span style="color:#59665b; font-size:0.92rem;">켈프(말린 보충제)를 급여했다면 아래를 선택하고, 제품 라벨의 오늘 급여분 요오드 총량을 입력해주세요.</span></div>', unsafe_allow_html=True)
+    use_kelp = st.checkbox("켈프 급여 중", key="c_use_kelp")
+    kelp_iodine_total = 0.0
+    if use_kelp:
+        kelp_iodine_total = st.number_input(
+            "켈프 하루 섭취량의 요오드 총량 (mcg)", 0.0, 5000.0, 0.0, step=10.0, key="c_kelp_iodine_total"
+        )
+        st.caption("제품 라벨의 ‘1회 제공량당 요오드(mcg)’를 기준으로 오늘 실제 급여량만 입력해주세요.")
+
     # 간식 (선택, 전문가가 영양 검토 시 직접 참고 — 자동 계산에는 미반영)
     st.markdown("#### 🍖 오늘 급여한 간식 (선택)")
     st.caption("메인 식단 외에 오늘 추가로 준 간식이 있다면, 검토에 참고할 수 있도록 종류와 양(g)을 최대한 자세히 적어주세요.")
@@ -1237,37 +1239,39 @@ with tab_user:
     # ═══════════════════════════════════════════════════════════════════════════
     st.divider()
     st.subheader("🏥 STEP 5. 건강 상태")
+    st.caption("모든 항목은 필수입니다. 해당 사항이 없다면 ‘없음’이라고 적어주세요.")
 
     col1, col2 = st.columns(2)
     with col1:
-        diseases    = st.text_area("현재 질환 (있으면 입력)", placeholder="예: 슬개골 탈구 2등급, 피부 알레르기", height=80)
-        medications = st.text_area("복용 중인 약", placeholder="예: 없음 / 소염제", height=80)
+        diseases    = st.text_area("현재 질환 · 필수", placeholder="현재 질환이 없다면 ‘없음’", height=80)
+        medications = st.text_area("복용 중인 약 · 필수", placeholder="복용 중인 약이 없다면 ‘없음’", height=80)
     with col2:
-        supplements = st.text_area("영양제", placeholder="예: 오메가3, 유산균", height=80)
-        allergies   = st.text_area("알레르기 (알려진 것)", placeholder="예: 닭고기, 없음", height=80)
+        supplements = st.text_area("영양제 · 필수", placeholder="급여 중인 영양제가 없다면 ‘없음’", height=80)
+        allergies   = st.text_area("알레르기 · 필수", placeholder="알려진 알레르기가 없다면 ‘없음’", height=80)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # STEP 6: 배변 & 생활 패턴 (선택)
+    # STEP 6: 배변 & 생활 패턴
     # ═══════════════════════════════════════════════════════════════════════════
     st.divider()
-    st.subheader("🚶 STEP 6. 배변 & 생활 패턴 (선택)")
+    st.subheader("🚶 STEP 6. 배변 & 생활 패턴")
+    st.caption("표시된 다섯 항목은 필수입니다. 추가 운동과 활동량 메모는 선택입니다.")
 
     col1, col2 = st.columns(2)
     with col1:
         stool_status = st.radio("배변 상태",
-            ["좋음", "약간 무름", "설사", "변비", "들쭉날쭉"], horizontal=True)
+            ["좋음", "약간 무름", "설사", "변비", "들쭉날쭉"], horizontal=True, index=None)
         walk_time = st.radio("하루 산책 시간",
-            ["거의 없음", "20분 이하", "30~60분", "1시간 이상"], horizontal=True)
+            ["거의 없음", "20분 이하", "30~60분", "1시간 이상"], horizontal=True, index=None)
         exercise = st.text_input("추가 운동 (종류·시간)", placeholder="예: 공놀이 10분, 노즈워크, 수영 주 1회")
         vomit_status = st.radio("최근 한 달간 구토",
-            ["없음", "한두 번", "자주"], horizontal=True)
+            ["없음", "한두 번", "자주"], horizontal=True, index=None)
 
     with col2:
         sleep_hours = st.radio("하루 수면 시간",
             ["10시간 미만 (매우 적음)", "10~12시간", "12~16시간 (권장/가장 흔함)", "16시간 이상"],
-            index=2, horizontal=True)
+            index=None, horizontal=True)
         water_intake = st.radio("물 섭취량",
-            ["적은 편", "평소와 비슷", "많은 편"], horizontal=True)
+            ["적은 편", "평소와 비슷", "많은 편"], horizontal=True, index=None)
         activity_memo = st.text_input("활동량 메모 (자유 입력)", placeholder="예: 실내에서만 생활, 계단 못 내려감")
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1275,7 +1279,7 @@ with tab_user:
     # ═══════════════════════════════════════════════════════════════════════════
     st.divider()
     st.subheader("💬 STEP 7. 가장 궁금한 점 1가지")
-    st.caption("식단 검토는 제출하신 식단 전반에 대한 평가와 함께, 가장 궁금한 질문 1가지에 대해 자세히 답변드립니다.")
+    st.caption("식단 검토는 제출하신 식단 전반에 대한 평가와 함께, 가장 궁금한 질문 1가지에 대해 자세히 답변드립니다. · 필수")
     question = st.text_area(
         "가장 궁금한 점 1가지를 적어주세요.",
         placeholder="예: 최근 변이 묽어졌는데 식단 때문인지 궁금합니다.",
@@ -1336,12 +1340,19 @@ with tab_user:
         active_selected = cooked_selected if is_cooked else selected
         active_amounts  = cooked_amounts  if is_cooked else amounts
 
-        if not owner_name:
-            st.error("보호자 이름을 입력해주세요.")
-        elif not owner_email or "@" not in owner_email:
-            st.error("올바른 이메일 주소를 입력해주세요.")
-        elif not dog_name:
-            st.error("반려견 이름을 입력해주세요.")
+        missing_fields = []
+        if not owner_name.strip(): missing_fields.append("보호자 이름")
+        if not owner_email.strip() or "@" not in owner_email: missing_fields.append("올바른 이메일 주소")
+        if not dog_name.strip(): missing_fields.append("반려견 이름")
+        if not body_condition: missing_fields.append("체형(BCS)")
+        if not weight_change: missing_fields.append("최근 6개월 체중 변화")
+        required_text = [("현재 질환", diseases), ("영양제", supplements), ("복용 중인 약", medications), ("알레르기", allergies), ("가장 궁금한 점 1가지", question)]
+        missing_fields.extend(label for label, value in required_text if not value or not value.strip())
+        required_radios = [("배변 상태", stool_status), ("하루 산책 시간", walk_time), ("하루 수면 시간", sleep_hours), ("물 섭취량", water_intake), ("최근 한 달간 구토", vomit_status)]
+        missing_fields.extend(label for label, value in required_radios if not value)
+        if use_kelp and kelp_iodine_total <= 0: missing_fields.append("켈프 오늘 급여분 요오드 총량")
+        if missing_fields:
+            st.warning("아래 필수 항목을 확인해주세요:\n\n" + " · ".join(missing_fields))
         elif not active_selected and not has_extra and not dry_diet:
             st.error("⚠️ 식단 재료를 입력해주세요. 생식·화식·혼합급여는 재료 선택 또는 직접 입력이 필수입니다. (건사료·동결건조만 선택하지 않아도 됩니다.)")
         else:
