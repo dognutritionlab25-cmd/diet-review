@@ -63,61 +63,7 @@ _logo = _logo_b64()
 _qr   = _qr_b64()
 _fluffy = _fluffy_b64()
 
-if _logo:
-    st.markdown(f"""
-<div style="
-    display:flex; align-items:center; gap:1.2rem;
-    padding: 1rem 1rem 0.8rem 1rem;
-    border-bottom: 2px solid #e8e8e8;
-    margin-bottom: 0.5rem;
-    flex-wrap: wrap;
-">
-    <img src="data:image/png;base64,{_logo}"
-         style="height:clamp(60px, 15vw, 120px); width:auto; object-fit:contain; flex-shrink:0;" />
-    <div style="min-width:0;">
-        <p style="margin:0 0 0.1rem 0; font-size:clamp(0.85rem, 2.5vw, 1rem); font-weight:700; color:#3a2a1a;">
-            반려견영양연구소
-        </p>
-        <h1 style="margin:0 0 0.2rem 0;
-                   font-size:clamp(1.2rem, 4vw, 2rem);
-                   font-weight:900; color:#3a2a1a;
-                   letter-spacing:-0.5px; line-height:1.2;">
-            식단 분석 보고서
-        </h1>
-        <p style="margin:0; font-size:clamp(0.8rem, 2vw, 0.95rem); color:#666; font-weight:400;">
-            전문가가 현재 식단을 분석하고 개선 방향을 함께 제안합니다.
-        </p>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-else:
-    st.markdown("""
-<div style="padding:1rem 0; border-bottom:2px solid #e8e8e8; margin-bottom:0.5rem;">
-    <p style="margin:0; font-weight:700; color:#3a2a1a;">반려견영양연구소</p>
-    <h1 style="margin:0.1rem 0 0.2rem 0; color:#3a2a1a; font-size:clamp(1.2rem, 4vw, 2rem); font-weight:900;">식단 분석 보고서</h1>
-    <p style="color:#666; margin:0; font-size:0.95rem;">전문가가 현재 식단을 분석하고 개선 방향을 함께 제안합니다.</p>
-</div>
-""", unsafe_allow_html=True)
-
-# 헤더 아래 브랜딩 섹션
-_qr_tag = f'<img src="data:image/png;base64,{_qr}" style="width:80px; height:80px; object-fit:contain;" />' if _qr else ''
-st.markdown(f"""
-<div style="
-    display:flex; align-items:center; gap:1.5rem;
-    padding: 0.8rem 1rem;
-    background:#fafafa;
-    border-bottom: 1px solid #e8e8e8;
-    margin-bottom: 1.2rem;
-    flex-wrap: wrap;
-">
-    {_qr_tag}
-    <div style="font-size:0.85rem; color:#555; line-height:1.8;">
-        <div style="font-weight:700; color:#3a2a1a; margin-bottom:0.2rem;">© 반려견 영양연구소 &nbsp;·&nbsp; 무단 전재 및 재배포를 금합니다.</div>
-        <div>📱 <b>반려견영양연구소</b> &nbsp;·&nbsp; 반려견의 건강은 오늘의 식단에서 시작됩니다.</div>
-        <div style="color:#888;">YouTube · 네이버 프리미엄 · 오디오 레터 · 반려견 식단 분석 · 카카오채널</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+_qr_tag = f'<img src="data:image/png;base64,{_qr}" style="width:78px; height:78px; object-fit:contain;" />' if _qr else ''
 
 # ── Google Sheets 연결 ────────────────────────────────────────────────────
 from googleapiclient.discovery import build
@@ -958,18 +904,19 @@ with tab_admin:
 
 with tab_user:
     if not st.session_state.authenticated:
-        st.divider()
-        st.markdown("### 🔐 전화번호 인증")
-        st.caption(
-            "반려견 식단 분석 이용권을 구매하신 분만 이용하실 수 있습니다. "
-            "결제 시 입력하신 전화번호를 입력해주세요."
-        )
+        hero_logo = f'<img src="data:image/png;base64,{_logo}" style="height:118px; width:auto; object-fit:contain;" />' if _logo else ''
+        hero_fluffy = f'<img src="data:image/png;base64,{_fluffy}" style="height:155px; width:auto; object-fit:contain; align-self:end;" />' if _fluffy else ''
+        st.markdown(f'''<div style="max-width:1180px;margin:.6rem auto 1rem;padding:1.2rem 1.5rem;background:#fffdf8;border:1px solid #e1e7d9;border-radius:18px;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;">
+          {hero_logo}<div style="flex:1;min-width:250px;"><h1 style="margin:0;color:#075a35;font-size:clamp(2rem,5vw,3.35rem);letter-spacing:-2px;">반려견 식단 분석</h1><p style="margin:.45rem 0 0;color:#253e31;font-size:1.08rem;font-weight:600;">지금 먹고 있는 식단을 영양 기준과 함께 꼼꼼하게 살펴봅니다.</p></div>{hero_fluffy}</div>''', unsafe_allow_html=True)
+        st.markdown('''<div style="max-width:1180px;margin:0 auto 1rem;padding:1rem;background:#fffdf9;border:1px solid #e3eadf;border-radius:16px;display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:.8rem;color:#283b31;"><div><b style="color:#287847">1 · 이용권 확인</b><br><small>구매하신 이용권으로 식단 분석을 시작합니다.</small></div><div><b style="color:#287847">2 · 식단 정보 입력</b><br><small>현재 식단과 아이의 생활 정보를 입력합니다.</small></div><div><b style="color:#287847">3 · 전문가 영양 분석</b><br><small>수의 영양학 전문가가 꼼꼼하게 분석합니다.</small></div><div><b style="color:#287847">4 · 이메일로 결과 확인</b><br><small>영업일 기준 5일 이내 결과를 보내드립니다.</small></div></div>''', unsafe_allow_html=True)
+        st.markdown("## 식단 분석을 시작해볼까요?")
+        st.markdown("반려견 식단 분석 이용권을 구매하신 분만 이용하실 수 있습니다.  \\n+결제 시 입력하신 전화번호를 먼저 확인해주세요.")
         auth_phone_input = st.text_input(
             "전화번호",
             placeholder="010-1234-5678",
             key="auth_phone_input"
         )
-        auth_btn = st.button("✅ 인증하기", type="primary", use_container_width=True)
+        auth_btn = st.button("이용권 확인하고 식단 분석 시작하기", type="primary", use_container_width=True)
         if auth_btn:
             if not _norm_phone(auth_phone_input):
                 st.error("올바른 전화번호를 입력해주세요.")
@@ -983,6 +930,7 @@ with tab_user:
                     st.rerun()
                 else:
                     st.error("❌ 이용권 구매 내역이 없거나 이미 사용하신 전화번호입니다. 결제 시 입력한 전화번호를 다시 확인해주세요.")
+        st.markdown(f'''<div style="max-width:1180px;margin:1.5rem auto .4rem;padding:1rem;background:#f8faf4;border:1px solid #e0e8d9;border-radius:14px;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">{_qr_tag}<div><b style="color:#155d38;">반려견영양연구소와 더 가까이 만나보세요</b><br><span style="color:#455449;font-size:.92rem;">YouTube · 네이버 프리미엄 · 오디오 레터 · 카카오채널</span></div></div><p style="color:#5a625a;font-size:.84rem;">© 반려견 영양연구소 · 무단 전재 및 재배포를 금합니다.</p>''', unsafe_allow_html=True)
         st.stop()
 
     # ═══════════════════════════════════════════════════════════════════════════
